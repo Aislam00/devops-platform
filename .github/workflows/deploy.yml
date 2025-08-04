@@ -48,13 +48,12 @@ jobs:
             - 'terraform/**'
           platform-api:
             - 'platform-api/**'
-            - 'k8s/platform-api/**'
+            - 'k8s/platform-api-deployment.yaml'
           backstage:
             - 'backstage/**'
-            - 'k8s/backstage/**'
+            - 'k8s/backstage-deployment.yaml'
           monitoring:
             - 'terraform/modules/monitoring/**'
-            - 'k8s/monitoring/**'
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
@@ -146,7 +145,7 @@ jobs:
 
     - name: Deploy Platform API
       run: |
-        kubectl apply -f k8s/platform-api/
+        kubectl apply -f k8s/platform-api-deployment.yaml
 
     - name: Wait for deployment
       run: |
@@ -179,7 +178,7 @@ jobs:
 
     - name: Deploy Backstage
       run: |
-        kubectl apply -f k8s/backstage/
+        kubectl apply -f k8s/backstage-deployment.yaml
 
     - name: Wait for deployment
       run: |
