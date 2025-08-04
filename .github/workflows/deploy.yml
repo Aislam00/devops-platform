@@ -1,0 +1,258 @@
+name: Deploy Platform
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'Component to deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - infrastructure
+        - platform-api
+        - backstage
+        - monitoring
+
+env:
+  AWS_REGION: eu-west-2
+  TERRAFORM_VERSION: 1.5.0
+  KUBECTL_VERSION: v1.28.0
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    outputs:
+      deploy-infrastructure: ${{ steps.changes.outputs.infrastructure }}
+      deploy-platform-api: ${{ steps.changes.outputs.platform-api }}
+      deploy-backstage: ${{ steps.changes.outputs.backstage }}
+      deploy-monitoring: ${{ steps.changes.outputs.monitoring }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check for changes
+      uses: dorny/paths-filter@v2
+      id: changes
+      with:
+        filters: |
+          infrastructure:
+            - 'terraform/**'
+          platform-api:
+            - 'platform-api/**'
+            - 'k8s/platform-api/**'
+          backstage:
+            - 'backstage/**'
+            - 'k8s/backstage/**'
+          monitoring:
+            - 'terraform/modules/monitoring/**'
+            - 'k8s/monitoring/**'
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Terraform validate
+      run: |
+        cd terraform/infrastructure
+        terraform init
+        terraform validate
+
+  infrastructure:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    needs: validate
+    if: needs.validate.outputs.deploy-infrastructure == 'true' || github.event.inputs.component == 'infrastructure' || github.event.inputs.component == 'all'
+    outputs:
+      cluster-name: ${{ steps.terraform.outputs.cluster-name }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Terraform init
+      run: |
+        cd terraform/infrastructure
+        terraform init
+
+    - name: Terraform plan
+      run: |
+        cd terraform/infrastructure
+        terraform plan -var-file="terraform.tfvars"
+
+    - name: Terraform apply
+      if: github.ref == 'refs/heads/main'
+      run: |
+        cd terraform/infrastructure
+        terraform apply -auto-approve -var-file="terraform.tfvars"
+
+    - name: Get cluster name
+      id: terraform
+      run: |
+        cd terraform/infrastructure
+        echo "cluster-name=$(terraform output -raw eks_cluster_name)" >> $GITHUB_OUTPUT
+
+  platform-api:
+    name: Deploy Platform API
+    runs-on: ubuntu-latest
+    needs: [validate, infrastructure]
+    if: (needs.validate.outputs.deploy-platform-api == 'true' || github.event.inputs.component == 'platform-api' || github.event.inputs.component == 'all') && always() && !failure()
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: ${{ env.KUBECTL_VERSION }}
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ needs.infrastructure.outputs.cluster-name || 'devplatform-dev' }}
+
+    - name: Deploy Platform API
+      run: |
+        kubectl apply -f k8s/platform-api/
+
+    - name: Wait for deployment
+      run: |
+        kubectl wait --for=condition=available --timeout=300s deployment/platform-api -n platform-api
+
+  backstage:
+    name: Deploy Backstage
+    runs-on: ubuntu-latest
+    needs: [validate, infrastructure, platform-api]
+    if: (needs.validate.outputs.deploy-backstage == 'true' || github.event.inputs.component == 'backstage' || github.event.inputs.component == 'all') && always() && !failure()
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: ${{ env.KUBECTL_VERSION }}
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ needs.infrastructure.outputs.cluster-name || 'devplatform-dev' }}
+
+    - name: Deploy Backstage
+      run: |
+        kubectl apply -f k8s/backstage/
+
+    - name: Wait for deployment
+      run: |
+        kubectl wait --for=condition=available --timeout=600s deployment/backstage -n backstage
+
+  monitoring:
+    name: Deploy Monitoring
+    runs-on: ubuntu-latest
+    needs: [validate, infrastructure]
+    if: (needs.validate.outputs.deploy-monitoring == 'true' || github.event.inputs.component == 'monitoring' || github.event.inputs.component == 'all') && always() && !failure()
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: ${{ env.KUBECTL_VERSION }}
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ needs.infrastructure.outputs.cluster-name || 'devplatform-dev' }}
+
+    - name: Setup Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: '3.12.0'
+
+    - name: Deploy monitoring
+      run: |
+        cd terraform/infrastructure
+        terraform init
+        terraform apply -target=module.monitoring -auto-approve -var-file="terraform.tfvars"
+
+    - name: Wait for monitoring
+      run: |
+        kubectl wait --for=condition=available --timeout=600s deployment/grafana -n prometheus
+
+  validate-deployment:
+    name: Validate Deployment
+    runs-on: ubuntu-latest
+    needs: [infrastructure, platform-api, backstage, monitoring]
+    if: always() && !failure()
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: ${{ env.KUBECTL_VERSION }}
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ needs.infrastructure.outputs.cluster-name || 'devplatform-dev' }}
+
+    - name: Platform status
+      run: |
+        echo "Platform deployment completed"
+        kubectl get pods --all-namespaces | grep -E "(backstage|platform-api|prometheus)"
+        kubectl get svc --all-namespaces | grep -E "(backstage|platform-api|grafana)"
+        kubectl get ingress --all-namespaces
