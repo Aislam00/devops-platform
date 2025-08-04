@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-api
+  namespace: platform-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: platform-api
+  template:
+    metadata:
+      labels:
+        app: platform-api
+    spec:
+      tolerations:
+      - key: "platform-services"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      containers:
+      - name: platform-api
+        image: 475641479654.dkr.ecr.eu-west-2.amazonaws.com/devplatform-api:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DATABASE_URL
+          value: "postgres://platformadmin:%5BtH1%23%2CY3yodV%3C0TP@devplatform-dev-db.cf4iiyuc2c46.eu-west-2.rds.amazonaws.com:5432/platform?sslmode=require"
+        - name: AWS_REGION
+          value: "eu-west-2"
+        - name: JWT_SECRET
+          value: "dev-secret-key-change-in-production"
+        - name: ENVIRONMENT
+          value: "development"
+        - name: CLUSTER_NAME
+          value: "devplatform-dev"
+        - name: DOMAIN_NAME
+          value: "iasolutions.co.uk"
+        - name: PORT
+          value: "8080"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platform-api-service
+  namespace: platform-api
+spec:
+  selector:
+    app: platform-api
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform-api-ingress
+  namespace: platform-api
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:475641479654:certificate/8376e6c1-8fab-4fc7-bca0-1f48098dcb1d
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+spec:
+  rules:
+  - host: api.iasolutions.co.uk
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: platform-api-service
+            port:
+              number: 80
