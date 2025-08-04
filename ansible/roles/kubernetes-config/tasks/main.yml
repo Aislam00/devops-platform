@@ -1,0 +1,71 @@
+- name: Ensure kubectl is configured
+  shell: |
+    aws eks --region {{ aws_region }} update-kubeconfig --name {{ cluster_name }}
+  delegate_to: localhost
+  
+- name: Verify cluster connectivity
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Node
+  register: node_info
+  
+- name: Create RBAC for platform services
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: platform-admin
+      rules:
+        - apiGroups: [""]
+          resources: ["*"]
+          verbs: ["*"]
+        - apiGroups: ["apps"]
+          resources: ["*"]
+          verbs: ["*"]
+        - apiGroups: ["networking.k8s.io"]
+          resources: ["*"]
+          verbs: ["*"]
+          
+- name: Create service account for platform API
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: platform-api
+        namespace: platform-system
+        annotations:
+          eks.amazonaws.com/role-arn: "arn:aws:iam::475641479654:role/devplatform-dev-platform-api-role"
+          
+- name: Bind platform service account to cluster role
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: platform-api-binding
+      subjects:
+        - kind: ServiceAccount
+          name: platform-api
+          namespace: platform-system
+      roleRef:
+        kind: ClusterRole
+        name: platform-admin
+        apiGroup: rbac.authorization.k8s.io
+        
+- name: Configure storage classes
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: fast-ssd
+        annotations:
+          storageclass.kubernetes.io/is-default-class: "false"
+      provisioner: ebs.csi.aws.com
+      volumeBindingMode: WaitForFirstConsumer
+      parameters:
+        type: gp3
+        iops: "3000"
+        throughput: "125"

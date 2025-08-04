@@ -1,0 +1,28 @@
+aws_region: eu-west-2
+cluster_name: devplatform-dev
+domain_name: iasolutions.co.uk
+
+kubernetes:
+  version: "1.28"
+  pod_subnet: "10.0.0.0/16"
+  service_subnet: "172.20.0.0/16"
+
+monitoring:
+  prometheus:
+    retention: "30d"
+    storage_size: "10Gi"
+  grafana:
+    admin_password: "{{ vault_grafana_password | default('admin123') }}"
+
+security:
+  enable_pod_security_standards: true
+  enable_network_policies: true
+  enable_rbac_audit: true
+
+platform_services:
+  backstage:
+    image: "backstage:latest"
+    replicas: 2
+  platform_api:
+    image: "platform-api:latest"
+    replicas: 3

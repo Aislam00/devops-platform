@@ -1,0 +1,177 @@
+- name: Create security namespace
+  kubernetes.core.k8s:
+    name: security
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Apply Pod Security Standards
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ item }}"
+        labels:
+          pod-security.kubernetes.io/enforce: restricted
+          pod-security.kubernetes.io/audit: restricted
+          pod-security.kubernetes.io/warn: restricted
+      spec: {}
+  loop:
+    - tenant-alpha
+    - tenant-beta
+    - platform-system
+
+- name: Create network policy for tenant isolation
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: tenant-isolation
+        namespace: "{{ item }}"
+      spec:
+        podSelector: {}
+        policyTypes:
+        - Ingress
+        - Egress
+        ingress:
+        - from:
+          - namespaceSelector:
+              matchLabels:
+                name: "{{ item }}"
+        - from:
+          - namespaceSelector:
+              matchLabels:
+                name: platform-system
+        egress:
+        - to:
+          - namespaceSelector:
+              matchLabels:
+                name: "{{ item }}"
+        - to:
+          - namespaceSelector:
+              matchLabels:
+                name: kube-system
+        - to: []
+          ports:
+          - protocol: TCP
+            port: 53
+          - protocol: UDP
+            port: 53
+  loop:
+    - tenant-alpha
+    - tenant-beta
+
+- name: Create RBAC for tenant users
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: tenant-user
+        namespace: "{{ item }}"
+      rules:
+      - apiGroups: [""]
+        resources: ["pods", "services", "configmaps", "secrets"]
+        verbs: ["get", "list", "create", "update", "patch", "delete"]
+      - apiGroups: ["apps"]
+        resources: ["deployments", "replicasets"]
+        verbs: ["get", "list", "create", "update", "patch", "delete"]
+      - apiGroups: ["networking.k8s.io"]
+        resources: ["ingresses"]
+        verbs: ["get", "list", "create", "update", "patch", "delete"]
+  loop:
+    - tenant-alpha
+    - tenant-beta
+
+- name: Apply security context constraints
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: LimitRange
+      metadata:
+        name: security-limits
+        namespace: "{{ item }}"
+      spec:
+        limits:
+        - type: Container
+          default:
+            cpu: 200m
+            memory: 256Mi
+          defaultRequest:
+            cpu: 100m
+            memory: 128Mi
+          max:
+            cpu: 1000m
+            memory: 1Gi
+        - type: Pod
+          max:
+            cpu: 2000m
+            memory: 2Gi
+  loop:
+    - tenant-alpha
+    - tenant-beta
+    - platform-system
+
+- name: Deploy Falco for runtime security
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: apps/v1
+      kind: DaemonSet
+      metadata:
+        name: falco
+        namespace: security
+      spec:
+        selector:
+          matchLabels:
+            app: falco
+        template:
+          metadata:
+            labels:
+              app: falco
+          spec:
+            hostNetwork: true
+            hostPID: true
+            containers:
+            - name: falco
+              image: falcosecurity/falco:latest
+              securityContext:
+                privileged: true
+              volumeMounts:
+              - name: dev
+                mountPath: /host/dev
+              - name: proc
+                mountPath: /host/proc
+                readOnly: true
+              - name: boot
+                mountPath: /host/boot
+                readOnly: true
+              - name: lib-modules
+                mountPath: /host/lib/modules
+                readOnly: true
+              - name: usr
+                mountPath: /host/usr
+                readOnly: true
+              - name: etc
+                mountPath: /host/etc
+                readOnly: true
+            volumes:
+            - name: dev
+              hostPath:
+                path: /dev
+            - name: proc
+              hostPath:
+                path: /proc
+            - name: boot
+              hostPath:
+                path: /boot
+            - name: lib-modules
+              hostPath:
+                path: /lib/modules
+            - name: usr
+              hostPath:
+                path: /usr
+            - name: etc
+              hostPath:
+                path: /etc

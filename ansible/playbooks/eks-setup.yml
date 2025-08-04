@@ -1,0 +1,64 @@
+- name: Configure EKS cluster and nodes
+  hosts: localhost
+  gather_facts: false
+  vars:
+    cluster_name: "{{ cluster_name }}"
+    aws_region: "{{ aws_region }}"
+  
+  tasks:
+    - name: Update kubeconfig for EKS cluster
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+      register: cluster_nodes
+      
+    - name: Display cluster nodes
+      debug:
+        msg: "Found {{ cluster_nodes.resources | length }} nodes in cluster"
+        
+    - name: Create platform namespaces
+      kubernetes.core.k8s:
+        name: "{{ item }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+      loop:
+        - platform-system
+        - monitoring
+        - security
+        - tenant-alpha
+        - tenant-beta
+        
+    - name: Apply resource quotas for tenant namespaces
+      kubernetes.core.k8s:
+        definition:
+          apiVersion: v1
+          kind: ResourceQuota
+          metadata:
+            name: tenant-quota
+            namespace: "{{ item }}"
+          spec:
+            hard:
+              requests.cpu: "2"
+              requests.memory: 4Gi
+              limits.cpu: "4"
+              limits.memory: 8Gi
+              persistentvolumeclaims: "4"
+      loop:
+        - tenant-alpha
+        - tenant-beta
+        
+    - name: Install Metrics Server
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: metrics-server
+            namespace: kube-system
+            
+    - name: Apply cluster autoscaler
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ playbook_dir }}/../roles/kubernetes-config/templates/cluster-autoscaler.yml"

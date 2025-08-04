@@ -1,0 +1,51 @@
+- name: Deploy platform monitoring and security
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: Apply Kubernetes configuration
+      include_role:
+        name: ../roles/kubernetes-config
+        
+    - name: Deploy monitoring stack
+      include_role:
+        name: ../roles/monitoring
+        
+    - name: Apply security policies
+      include_role:
+        name: ../roles/security
+        
+    - name: Verify all deployments are ready
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        namespace: "{{ item }}"
+        wait: true
+        wait_condition:
+          type: Available
+          status: "True"
+        wait_timeout: 300
+      loop:
+        - monitoring
+        - security
+      ignore_errors: true
+      
+    - name: Display service endpoints
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        namespace: monitoring
+        name: grafana
+      register: grafana_service
+      
+    - name: Show Grafana access information
+      debug:
+        msg: |
+          Grafana is accessible at:
+          {% if grafana_service.resources[0].status.loadBalancer.ingress is defined %}
+          External IP: {{ grafana_service.resources[0].status.loadBalancer.ingress[0].hostname }}:3000
+          {% else %}
+          Use port-forward: kubectl port-forward -n monitoring svc/grafana 3000:3000
+          {% endif %}
+          Username: admin
+          Password: {{ monitoring.grafana.admin_password }}

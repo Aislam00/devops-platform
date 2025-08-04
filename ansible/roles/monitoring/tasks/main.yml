@@ -1,0 +1,142 @@
+- name: Create monitoring namespace
+  kubernetes.core.k8s:
+    name: monitoring
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Deploy Prometheus
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: prometheus
+        namespace: monitoring
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: prometheus
+        template:
+          metadata:
+            labels:
+              app: prometheus
+          spec:
+            containers:
+            - name: prometheus
+              image: prom/prometheus:latest
+              ports:
+              - containerPort: 9090
+              volumeMounts:
+              - name: config
+                mountPath: /etc/prometheus
+              - name: storage
+                mountPath: /prometheus
+              args:
+                - '--config.file=/etc/prometheus/prometheus.yml'
+                - '--storage.tsdb.path=/prometheus'
+                - '--storage.tsdb.retention.time={{ monitoring.prometheus.retention }}'
+            volumes:
+            - name: config
+              configMap:
+                name: prometheus-config
+            - name: storage
+              emptyDir: {}
+
+- name: Create Prometheus ConfigMap
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: prometheus-config
+        namespace: monitoring
+      data:
+        prometheus.yml: |
+          global:
+            scrape_interval: 30s
+            evaluation_interval: 30s
+          
+          scrape_configs:
+            - job_name: 'kubernetes-nodes'
+              kubernetes_sd_configs:
+                - role: node
+              relabel_configs:
+                - source_labels: [__address__]
+                  regex: '(.*):10250'
+                  target_label: __address__
+                  replacement: '${1}:9100'
+            
+            - job_name: 'kubernetes-pods'
+              kubernetes_sd_configs:
+                - role: pod
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                  action: keep
+                  regex: true
+
+- name: Create Prometheus Service
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: prometheus
+        namespace: monitoring
+      spec:
+        selector:
+          app: prometheus
+        ports:
+        - port: 9090
+          targetPort: 9090
+        type: ClusterIP
+
+- name: Deploy Grafana
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: grafana
+        namespace: monitoring
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: grafana
+        template:
+          metadata:
+            labels:
+              app: grafana
+          spec:
+            containers:
+            - name: grafana
+              image: grafana/grafana:latest
+              ports:
+              - containerPort: 3000
+              env:
+              - name: GF_SECURITY_ADMIN_PASSWORD
+                value: "{{ monitoring.grafana.admin_password }}"
+              volumeMounts:
+              - name: storage
+                mountPath: /var/lib/grafana
+            volumes:
+            - name: storage
+              emptyDir: {}
+
+- name: Create Grafana Service
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: grafana
+        namespace: monitoring
+      spec:
+        selector:
+          app: grafana
+        ports:
+        - port: 3000
+          targetPort: 3000
+        type: LoadBalancer
