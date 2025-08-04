@@ -91,6 +91,21 @@ API catalog with integrated documentation:
 
 ![API Catalog Integration](screenshots/05-api-catalog-integration.png)
 
+## CI/CD Pipeline
+
+The platform includes a comprehensive GitHub Actions workflow that orchestrates the entire deployment process:
+
+![GitHub Actions Pipeline](screenshots/github-actions-pipeline.png)
+
+The pipeline handles:
+- Infrastructure validation and provisioning with Terraform
+- Conditional deployments based on file changes  
+- Application deployments to Kubernetes with proper dependency ordering
+- Monitoring setup and health checks
+- Manual deployment options for specific components
+
+Note: Infrastructure is typically destroyed between deployments for cost optimization, which is why some pipeline runs show connection errors to non-existent clusters. The workflow itself demonstrates proper CI/CD practices even when the target infrastructure isn't available.
+
 ## Technology Stack
 
 - **AWS EKS** - Kubernetes cluster management
