@@ -1,0 +1,45 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: platform-api
+  title: DevPlatform API
+  description: Go-based Platform API for tenant management and Kubernetes operations
+  annotations:
+    github.com/project-slug: Aislam00/devplatform
+    backstage.io/kubernetes-id: platform-api
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: devplatform
+  providesApis:
+    - platform-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: platform-api
+  title: Platform API
+  description: RESTful API for platform operations
+spec:
+  type: openapi
+  lifecycle: production
+  owner: platform-team
+  system: devplatform
+  definition: |
+    openapi: 3.0.0
+    info:
+      title: DevPlatform API
+      version: 1.0.0
+    paths:
+      /api/v1/health:
+        get:
+          summary: Health check
+      /api/v1/tenants:
+        get:
+          summary: List tenants
+        post:
+          summary: Create tenant
+      /api/v1/clusters/{name}/status:
+        get:
+          summary: Get cluster status

@@ -1,0 +1,45 @@
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: devplatform
+  title: DevPlatform
+  description: Complete Platform Engineering solution with multi-tenant Kubernetes management
+spec:
+  owner: platform-team
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: terraform-infrastructure
+  title: Terraform Infrastructure
+  description: Infrastructure as Code for EKS, RDS, and VPC
+  annotations:
+    github.com/project-slug: Aislam00/devplatform
+spec:
+  type: resource
+  lifecycle: production
+  owner: platform-team
+  system: devplatform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ansible-configuration
+  title: Ansible Configuration
+  description: Configuration management for multi-tenant Kubernetes setup
+  annotations:
+    github.com/project-slug: Aislam00/devplatform
+spec:
+  type: resource
+  lifecycle: production
+  owner: platform-team
+  system: devplatform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform-team
+  title: Platform Engineering Team
+spec:
+  type: team
+  children: []
