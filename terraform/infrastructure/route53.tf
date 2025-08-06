@@ -49,7 +49,7 @@ resource "aws_route53_record" "portal" {
   name    = "portal.${var.domain_name}"
   type    = "CNAME"
   ttl     = 300
-  records = ["k8s-backstag-backstag-a090799fb8-659957323.eu-west-2.elb.amazonaws.com"]
+  records = [var.portal_dns_record]
 }
 
 resource "aws_route53_record" "api" {
@@ -57,7 +57,7 @@ resource "aws_route53_record" "api" {
   name    = "api.${var.domain_name}"
   type    = "CNAME"
   ttl     = 300
-  records = ["k8s-platform-platform-44b9e3bb8e-563398115.eu-west-2.elb.amazonaws.com"]
+  records = [var.api_dns_record]
 }
 
 resource "aws_route53_record" "grafana" {
@@ -65,7 +65,7 @@ resource "aws_route53_record" "grafana" {
   name    = "grafana.${var.domain_name}"
   type    = "CNAME"
   ttl     = 300
-  records = ["k8s-promethe-grafanai-46e46fdf83-1277684893.eu-west-2.elb.amazonaws.com"]
+  records = [var.grafana_dns_record]
 }
 
 resource "aws_route53_record" "prometheus" {
@@ -73,5 +73,5 @@ resource "aws_route53_record" "prometheus" {
   name    = "prometheus.${var.domain_name}"
   type    = "CNAME"
   ttl     = 300
-  records = ["k8s-promethe-promethe-3945819cda-941519219.eu-west-2.elb.amazonaws.com"]
+  records = [var.prometheus_dns_record]
 }

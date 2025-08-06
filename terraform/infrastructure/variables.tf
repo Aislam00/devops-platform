@@ -1,25 +1,26 @@
 variable "aws_region" {
   description = "AWS region for resources"
   type        = string
-  default     = "eu-west-2"
 }
 
 variable "environment" {
   description = "Environment name"
   type        = string
-  default     = "dev"
 }
 
 variable "project_name" {
   description = "Name of the project"
   type        = string
-  default     = "devplatform"
+}
+
+variable "owner" {
+  description = "Owner of the resources"
+  type        = string
 }
 
 variable "domain_name" {
   description = "Domain name for the platform"
   type        = string
-  default     = "iasolutions.co.uk"
 }
 
 variable "vpc_cidr" {
@@ -44,6 +45,12 @@ variable "kubernetes_version" {
   description = "Kubernetes version for EKS cluster"
   type        = string
   default     = "1.28"
+}
+
+variable "database_name" {
+  description = "Database name for RDS instance"
+  type        = string
+  default     = "platform"
 }
 
 variable "db_master_username" {
@@ -74,4 +81,25 @@ variable "db_max_allocated_storage" {
   description = "Maximum allocated storage for RDS"
   type        = number
   default     = 100
+}
+
+# Route53 DNS Record Variables (for dynamic configuration)
+variable "portal_dns_record" {
+  description = "DNS record for portal service"
+  type        = string
+}
+
+variable "api_dns_record" {
+  description = "DNS record for API service"
+  type        = string
+}
+
+variable "grafana_dns_record" {
+  description = "DNS record for Grafana service"
+  type        = string
+}
+
+variable "prometheus_dns_record" {
+  description = "DNS record for Prometheus service"
+  type        = string
 }

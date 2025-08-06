@@ -36,9 +36,9 @@ provider "aws" {
   region = var.aws_region
   default_tags {
     tags = {
-      Project     = "devplatform"
+      Project     = var.project_name
       Environment = var.environment
-      Owner       = "alamin.islam"
+      Owner       = var.owner
       ManagedBy   = "terraform"
     }
   }
@@ -128,7 +128,7 @@ module "rds" {
   source = "../modules/rds"
 
   db_name               = "${var.project_name}-${var.environment}-db"
-  database_name         = "platform"
+  database_name         = var.database_name
   master_username       = var.db_master_username
   postgres_version      = var.postgres_version
   instance_class        = var.db_instance_class

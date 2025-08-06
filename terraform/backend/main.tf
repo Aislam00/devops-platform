@@ -12,16 +12,16 @@ provider "aws" {
   region = var.aws_region
   default_tags {
     tags = {
-      Project     = "devplatform"
-      Environment = "shared"
-      Owner       = "alamin.islam"
+      Project     = var.project_name
+      Environment = var.environment
+      Owner       = var.owner
       ManagedBy   = "terraform"
     }
   }
 }
 
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "devplatform-terraform-state-${var.account_id}"
+  bucket = "${var.project_name}-terraform-state-${var.account_id}"
 }
 
 resource "aws_s3_bucket_versioning" "terraform_state" {
@@ -50,7 +50,7 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
 }
 
 resource "aws_dynamodb_table" "terraform_locks" {
-  name         = "devplatform-terraform-locks"
+  name         = "${var.project_name}-terraform-locks"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "LockID"
 
