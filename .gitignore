@@ -4,7 +4,7 @@
 *.tfplan
 .terraform/
 .terraform.lock.hcl
-.tfvars
+*.tfvars
 
 # Go
 *.exe
