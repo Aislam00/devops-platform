@@ -12,10 +12,6 @@ resource "aws_acm_certificate" "platform" {
   lifecycle {
     create_before_destroy = true
   }
-
-  tags = merge(local.common_tags, {
-    Name = "${var.project_name}-${var.environment}-cert"
-  })
 }
 
 resource "aws_route53_record" "cert_validation" {

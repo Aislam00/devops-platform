@@ -22,11 +22,6 @@ resource "aws_eks_cluster" "main" {
   depends_on = [
     var.cluster_policy_attachments
   ]
-
-  tags = {
-    Name = var.cluster_name
-    Type = "platform-cluster"
-  }
 }
 
 resource "aws_eks_node_group" "platform_services" {
@@ -65,11 +60,6 @@ resource "aws_eks_node_group" "platform_services" {
   depends_on = [
     var.node_policy_attachments
   ]
-
-  tags = {
-    Name = "${var.cluster_name}-platform-services"
-    Type = "platform-node-group"
-  }
 }
 
 resource "aws_eks_node_group" "tenant_workloads" {
@@ -102,11 +92,6 @@ resource "aws_eks_node_group" "tenant_workloads" {
   depends_on = [
     var.node_policy_attachments
   ]
-
-  tags = {
-    Name = "${var.cluster_name}-tenant-workloads"
-    Type = "tenant-node-group"
-  }
 }
 
 resource "aws_eks_addon" "vpc_cni" {

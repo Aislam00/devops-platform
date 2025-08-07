@@ -12,8 +12,6 @@ data "aws_iam_policy_document" "eks_cluster_assume_role" {
 resource "aws_iam_role" "eks_cluster" {
   name               = "${local.cluster_name}-cluster-role"
   assume_role_policy = data.aws_iam_policy_document.eks_cluster_assume_role.json
-
-  tags = local.common_tags
 }
 
 resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
@@ -35,8 +33,6 @@ data "aws_iam_policy_document" "eks_node_group_assume_role" {
 resource "aws_iam_role" "eks_node_group" {
   name               = "${local.cluster_name}-node-group-role"
   assume_role_policy = data.aws_iam_policy_document.eks_node_group_assume_role.json
-
-  tags = local.common_tags
 }
 
 resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
@@ -62,8 +58,6 @@ resource "aws_iam_openid_connect_provider" "eks" {
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
   url             = module.eks.oidc_issuer_url
-
-  tags = local.common_tags
 }
 
 data "aws_iam_policy_document" "vpc_cni_assume_role" {
@@ -90,8 +84,6 @@ data "aws_iam_policy_document" "vpc_cni_assume_role" {
 resource "aws_iam_role" "vpc_cni" {
   name               = "${local.cluster_name}-vpc-cni-role"
   assume_role_policy = data.aws_iam_policy_document.vpc_cni_assume_role.json
-
-  tags = local.common_tags
 }
 
 resource "aws_iam_role_policy_attachment" "vpc_cni" {
@@ -123,8 +115,6 @@ data "aws_iam_policy_document" "ebs_csi_assume_role" {
 resource "aws_iam_role" "ebs_csi" {
   name               = "${local.cluster_name}-ebs-csi-role"
   assume_role_policy = data.aws_iam_policy_document.ebs_csi_assume_role.json
-
-  tags = local.common_tags
 }
 
 resource "aws_iam_role_policy_attachment" "ebs_csi" {
@@ -133,12 +123,7 @@ resource "aws_iam_role_policy_attachment" "ebs_csi" {
 }
 
 resource "aws_kms_key" "eks" {
-  description             = "KMS key for EKS cluster encryption"
   deletion_window_in_days = 7
-
-  tags = merge(local.common_tags, {
-    Name = "${local.cluster_name}-kms"
-  })
 }
 
 resource "aws_kms_alias" "eks" {
@@ -170,13 +155,10 @@ data "aws_iam_policy_document" "aws_load_balancer_controller_assume_role" {
 resource "aws_iam_role" "aws_load_balancer_controller" {
   name               = "${local.cluster_name}-load-balancer-controller-role"
   assume_role_policy = data.aws_iam_policy_document.aws_load_balancer_controller_assume_role.json
-
-  tags = local.common_tags
 }
 
 resource "aws_iam_policy" "aws_load_balancer_controller" {
-  name        = "${local.cluster_name}-load-balancer-controller-policy"
-  description = "Policy for AWS Load Balancer Controller"
+  name = "${local.cluster_name}-load-balancer-controller-policy"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -284,8 +266,6 @@ resource "aws_iam_policy" "aws_load_balancer_controller" {
       }
     ]
   })
-
-  tags = local.common_tags
 }
 
 resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {

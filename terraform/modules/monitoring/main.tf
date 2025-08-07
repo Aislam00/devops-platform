@@ -1,6 +1,5 @@
 resource "aws_prometheus_workspace" "main" {
   alias = "${var.project_name}-${var.environment}-prometheus"
-  tags  = var.tags
 }
 
 data "aws_iam_policy_document" "prometheus_ingest_assume_role" {
@@ -27,7 +26,6 @@ data "aws_iam_policy_document" "prometheus_ingest_assume_role" {
 resource "aws_iam_role" "prometheus_ingest" {
   name               = "${var.project_name}-${var.environment}-prometheus-ingest"
   assume_role_policy = data.aws_iam_policy_document.prometheus_ingest_assume_role.json
-  tags               = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "prometheus_ingest" {
@@ -49,6 +47,11 @@ resource "kubernetes_service_account" "prometheus_server" {
       "eks.amazonaws.com/role-arn" = aws_iam_role.prometheus_ingest.arn
     }
   }
+}
+
+resource "random_password" "grafana_admin" {
+  length  = 16
+  special = true
 }
 
 resource "helm_release" "prometheus" {
@@ -138,7 +141,7 @@ resource "helm_release" "grafana" {
 
   set {
     name  = "adminPassword"
-    value = "admin123"
+    value = random_password.grafana_admin.result
   }
 
   values = [
@@ -179,7 +182,7 @@ resource "kubernetes_ingress_v1" "grafana" {
       "kubernetes.io/ingress.class"               = "alb"
       "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
       "alb.ingress.kubernetes.io/target-type"     = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn" = "arn:aws:acm:eu-west-2:475641479654:certificate/8376e6c1-8fab-4fc7-bca0-1f48098dcb1d"
+      "alb.ingress.kubernetes.io/certificate-arn" = var.certificate_arn
       "alb.ingress.kubernetes.io/listen-ports"    = "[{\"HTTP\": 80}, {\"HTTPS\": 443}]"
       "alb.ingress.kubernetes.io/ssl-redirect"    = "443"
     }
@@ -216,7 +219,7 @@ resource "kubernetes_ingress_v1" "prometheus" {
       "kubernetes.io/ingress.class"               = "alb"
       "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
       "alb.ingress.kubernetes.io/target-type"     = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn" = "arn:aws:acm:eu-west-2:475641479654:certificate/8376e6c1-8fab-4fc7-bca0-1f48098dcb1d"
+      "alb.ingress.kubernetes.io/certificate-arn" = var.certificate_arn
       "alb.ingress.kubernetes.io/listen-ports"    = "[{\"HTTP\": 80}, {\"HTTPS\": 443}]"
       "alb.ingress.kubernetes.io/ssl-redirect"    = "443"
     }

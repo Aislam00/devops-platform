@@ -1,10 +1,6 @@
 resource "aws_db_subnet_group" "main" {
   name       = var.db_subnet_group_name
   subnet_ids = var.private_subnet_ids
-
-  tags = {
-    Name = var.db_subnet_group_name
-  }
 }
 
 resource "aws_security_group" "rds" {
@@ -24,19 +20,10 @@ resource "aws_security_group" "rds" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
-  tags = {
-    Name = "${var.db_name}-rds-sg"
-  }
 }
 
 resource "aws_kms_key" "rds" {
-  description             = "KMS key for RDS encryption"
   deletion_window_in_days = 7
-
-  tags = {
-    Name = "${var.db_name}-rds-kms"
-  }
 }
 
 resource "aws_kms_alias" "rds" {
@@ -56,7 +43,6 @@ resource "random_password" "master" {
 
 resource "aws_secretsmanager_secret" "rds_password" {
   name                    = "${var.db_name}-master-password"
-  description             = "Master password for RDS instance"
   recovery_window_in_days = 7
   kms_key_id              = aws_kms_key.rds.arn
 }
@@ -81,10 +67,11 @@ resource "aws_db_instance" "main" {
   storage_type          = "gp3"
   storage_encrypted     = true
   kms_key_id            = aws_kms_key.rds.arn
-  publicly_accessible   = true
-  db_name               = var.database_name
-  username              = var.master_username
-  password              = random_password.master.result
+  publicly_accessible   = false
+
+  db_name  = var.database_name
+  username = var.master_username
+  password = random_password.master.result
 
   vpc_security_group_ids = [aws_security_group.rds.id]
   db_subnet_group_name   = aws_db_subnet_group.main.name
@@ -103,9 +90,4 @@ resource "aws_db_instance" "main" {
   enabled_cloudwatch_logs_exports = ["postgresql"]
 
   deletion_protection = var.deletion_protection
-
-  tags = {
-    Name = var.db_name
-    Type = "platform-database"
-  }
 }
