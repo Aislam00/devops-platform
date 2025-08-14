@@ -2,6 +2,53 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: platform-api
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: platform-api-secrets
+  namespace: platform-api
+type: Opaque
+stringData:
+  DATABASE_URL: "postgres://username:password@your-db-host:5432/platform?sslmode=require"
+  JWT_SECRET: "your-secure-jwt-secret-here"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: platform-api-sa
+  namespace: platform-api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-api-role
+  namespace: platform-api
+rules:
+- apiGroups: [""]
+  resources: ["namespaces", "pods", "services"]
+  verbs: ["get", "list", "create", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-api-binding
+  namespace: platform-api
+subjects:
+- kind: ServiceAccount
+  name: platform-api-sa
+  namespace: platform-api
+roleRef:
+  kind: Role
+  name: platform-api-role
+  apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -9,7 +56,7 @@ metadata:
   name: platform-api
   namespace: platform-api
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: platform-api
@@ -18,6 +65,13 @@ spec:
       labels:
         app: platform-api
     spec:
+      serviceAccountName: platform-api-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       tolerations:
       - key: "platform-services"
         operator: "Equal"
@@ -28,15 +82,30 @@ spec:
         image: 475641479654.dkr.ecr.eu-west-2.amazonaws.com/devplatform-api:latest
         ports:
         - containerPort: 8080
+          protocol: TCP
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534
+          capabilities:
+            drop:
+            - ALL
         env:
         - name: DATABASE_URL
-          value: "postgres://platformadmin:%5BtH1%23%2CY3yodV%3C0TP@devplatform-dev-db.cf4iiyuc2c46.eu-west-2.rds.amazonaws.com:5432/platform?sslmode=require"
+          valueFrom:
+            secretKeyRef:
+              name: platform-api-secrets
+              key: DATABASE_URL
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: platform-api-secrets
+              key: JWT_SECRET
         - name: AWS_REGION
           value: "eu-west-2"
-        - name: JWT_SECRET
-          value: "dev-secret-key-change-in-production"
         - name: ENVIRONMENT
-          value: "development"
+          value: "production"
         - name: CLUSTER_NAME
           value: "devplatform-dev"
         - name: DOMAIN_NAME
@@ -50,6 +119,24 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "250m"
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -60,8 +147,44 @@ spec:
   selector:
     app: platform-api
   ports:
-    - port: 80
-      targetPort: 8080
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: platform-api-netpol
+  namespace: platform-api
+spec:
+  podSelector:
+    matchLabels:
+      app: platform-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 5432
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -73,8 +196,9 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:475641479654:certificate/8376e6c1-8fab-4fc7-bca0-1f48098dcb1d
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/security-groups: sg-your-security-group
 spec:
   rules:
   - host: api.iasolutions.co.uk

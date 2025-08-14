@@ -12,7 +12,7 @@ monitoring:
     retention: "30d"
     storage_size: "10Gi"
   grafana:
-    admin_password: "{{ vault_grafana_password | default('admin123') }}"
+    admin_password: "{{ vault_grafana_password | default('CHANGE_ME_IN_VAULT') }}"
 
 security:
   enable_pod_security_standards: true
