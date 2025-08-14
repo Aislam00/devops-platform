@@ -47,8 +47,8 @@ jobs:
       run: |
         cd terraform/infrastructure
         terraform init
-        terraform plan -var-file="terraform.tfvars"
-        terraform apply -auto-approve -var-file="terraform.tfvars"
+        terraform plan
+        terraform apply -auto-approve
 
     - name: Get cluster name
       id: terraform
@@ -88,6 +88,13 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'yarn'
+        cache-dependency-path: backstage/portal/yarn.lock
+
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -98,10 +105,15 @@ jobs:
     - name: Login to ECR
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: Build and push Portal
+    - name: Build Backstage
       run: |
         cd backstage/portal
-        docker build -t $ECR_REGISTRY/devplatform-portal:latest .
+        yarn install --frozen-lockfile
+        yarn build:backend
+        yarn build-image --tag $ECR_REGISTRY/devplatform-portal:latest
+
+    - name: Push to ECR
+      run: |
         docker push $ECR_REGISTRY/devplatform-portal:latest
 
   deploy-api:
