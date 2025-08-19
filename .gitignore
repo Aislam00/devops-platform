@@ -33,3 +33,10 @@ Thumbs.db
 # Temporary files
 temp-rds-access.tf
 .env
+
+# Platform backups
+platform-backup-*/
+*.tar.gz
+aws-info/
+
+*.sh

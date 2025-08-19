@@ -24,7 +24,7 @@ jobs:
   infrastructure:
     name: Deploy Infrastructure
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && (github.event.inputs.component == 'infrastructure' || github.event.inputs.component == 'all' || github.event.inputs.component == '')
+    if: false
     outputs:
       cluster-name: ${{ steps.terraform.outputs.cluster-name }}
     steps:
@@ -44,16 +44,16 @@ jobs:
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Deploy Infrastructure
+      working-directory: terraform/infrastructure
       run: |
-        cd terraform/infrastructure
         terraform init
         terraform plan
         terraform apply -auto-approve
 
     - name: Get cluster name
       id: terraform
+      working-directory: terraform/infrastructure
       run: |
-        cd terraform/infrastructure
         echo "cluster-name=$(terraform output -raw eks_cluster_name)" >> $GITHUB_OUTPUT
 
   build-api:
@@ -109,11 +109,8 @@ jobs:
       run: |
         cd backstage/portal
         yarn install --frozen-lockfile
-        yarn build:backend
-        yarn build-image --tag $ECR_REGISTRY/devplatform-portal:latest
-
-    - name: Push to ECR
-      run: |
+        yarn build:backend --config app-config.yaml
+        docker build -t $ECR_REGISTRY/devplatform-portal:latest .
         docker push $ECR_REGISTRY/devplatform-portal:latest
 
   deploy-api:
@@ -142,9 +139,9 @@ jobs:
         aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ needs.infrastructure.outputs.cluster-name || 'devplatform-dev' }}
 
     - name: Deploy API
+      working-directory: terraform/infrastructure
       run: |
-        kubectl apply -f k8s/secure-platform-api.yaml
-        kubectl wait --for=condition=available --timeout=300s deployment/platform-api -n platform-api
+        terraform apply -target=kubernetes_deployment.platform_api -auto-approve
 
   deploy-portal:
     name: Deploy Portal
@@ -173,5 +170,5 @@ jobs:
 
     - name: Deploy Portal
       run: |
-        kubectl apply -f k8s/secure-backstage.yaml
-        kubectl wait --for=condition=available --timeout=600s deployment/backstage -n backstage
+        cd terraform/infrastructure
+        terraform apply -target=kubernetes_deployment.backstage -auto-approve

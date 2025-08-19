@@ -10,9 +10,11 @@ permissions:
   contents: read
   security-events: write
   actions: read
+  id-token: write   
 
 env:
   AWS_REGION: eu-west-2
+  AWS_ACCOUNT_ID: 475641479654
 
 jobs:
   test:
@@ -33,13 +35,13 @@ jobs:
         go mod tidy
         go test ./...
 
-    - name: Build
+    - name: Build binary
       run: |
         cd platform-api
         go build -o platform-api cmd/server/main.go
 
   lint:
-    name: Lint
+    name: Lint & Validate Terraform
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -81,3 +83,37 @@ jobs:
       if: always()
       with:
         sarif_file: 'trivy-results.sarif'
+
+  docker:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: [test, lint, security]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GitHubActionsRole
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      run: |
+        aws ecr get-login-password --region $AWS_REGION \
+        | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+
+    - name: Build & Push platform-api
+      run: |
+        cd platform-api
+        docker build -t platform-api .
+        docker tag platform-api:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/devplatform-api:latest
+        docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/devplatform-api:latest
+
+    - name: Build & Push devplatform-portal
+      run: |
+        cd backstage
+        docker build -t devplatform-portal .
+        docker tag devplatform-portal:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/devplatform-portal:latest
+        docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/devplatform-portal:latest

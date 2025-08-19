@@ -42,10 +42,11 @@ resource "random_password" "master" {
 }
 
 resource "aws_secretsmanager_secret" "rds_password" {
-  name                    = "${var.db_name}-master-password"
+  name_prefix             = "${var.db_name}-master-password-"   
   recovery_window_in_days = 7
   kms_key_id              = aws_kms_key.rds.arn
 }
+
 
 resource "aws_secretsmanager_secret_version" "rds_password" {
   secret_id = aws_secretsmanager_secret.rds_password.id

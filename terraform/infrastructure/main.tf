@@ -4,21 +4,9 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.1"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.17"
-    }
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 2.38"
-    }
-    tls = {
-      source  = "hashicorp/tls"
-      version = "~> 4.1"
     }
   }
 
@@ -33,18 +21,6 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
-}
-
-provider "helm" {
-  kubernetes {
-    host                   = module.eks.cluster_endpoint
-    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
-    }
-  }
 }
 
 provider "kubernetes" {
@@ -66,11 +42,6 @@ data "aws_route53_zone" "main" {
 
 locals {
   cluster_name = "${var.project_name}-${var.environment}"
-  common_tags = {
-    Project     = var.project_name
-    Environment = var.environment
-    Cluster     = local.cluster_name
-  }
 }
 
 module "vpc" {
@@ -128,7 +99,7 @@ module "rds" {
 
   vpc_id               = module.vpc.vpc_id
   vpc_cidr             = module.vpc.vpc_cidr_block
-  private_subnet_ids   = module.vpc.public_subnet_ids
+  private_subnet_ids   = module.vpc.private_subnet_ids   
   db_subnet_group_name = "${var.project_name}-${var.environment}-db-subnet-group"
 
   backup_retention_period      = var.environment == "prod" ? 30 : 7
@@ -149,6 +120,26 @@ module "monitoring" {
   aws_region        = var.aws_region
   domain_name       = var.domain_name
   certificate_arn   = aws_acm_certificate_validation.platform.certificate_arn
+}
 
-  tags = local.common_tags
+data "aws_security_group" "cluster_sg" {
+  id = "sg-0d5ff0a3f0fdee85a"
+}
+
+resource "aws_security_group_rule" "alb_https_inbound" {
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = data.aws_security_group.cluster_sg.id
+}
+
+resource "aws_security_group_rule" "alb_http_inbound" {
+  type              = "ingress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = data.aws_security_group.cluster_sg.id
 }

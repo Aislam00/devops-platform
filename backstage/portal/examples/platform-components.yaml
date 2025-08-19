@@ -1,0 +1,177 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: devplatform
+  description: Self-service developer platform
+  tags:
+    - platform
+    - aws
+    - kubernetes
+spec:
+  owner: platform-team
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: platform-api
+  description: Platform API - handles tenant creation and K8s operations
+  annotations:
+    backstage.io/kubernetes-id: platform-api
+    backstage.io/kubernetes-namespace: platform-api
+  tags:
+    - golang
+    - platform
+    - api
+  links:
+    - url: https://api.iasolutions.co.uk/api/v1/health
+      title: Health Check
+      icon: dashboard
+    - url: https://api.iasolutions.co.uk/tenants
+      title: Tenants API
+      icon: api
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: devplatform
+  providesApis: [platform-api]
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: platform-api
+  description: Platform API for tenant management
+  tags:
+    - rest
+    - platform
+spec:
+  type: openapi
+  lifecycle: production
+  owner: platform-team
+  system: devplatform
+  definition: |
+    openapi: 3.0.0
+    info:
+      title: Platform API
+      version: 1.0.0
+    paths:
+      /api/v1/health:
+        get:
+          summary: Health check
+          responses:
+            '200':
+              description: Service is healthy
+      /tenants:
+        get:
+          summary: List tenants
+          responses:
+            '200':
+              description: List of tenants
+        post:
+          summary: Create tenant
+          responses:
+            '201':
+              description: Tenant created
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: backstage-portal
+  description: Self-service developer portal
+  annotations:
+    backstage.io/kubernetes-id: backstage
+    backstage.io/kubernetes-namespace: backstage
+  tags:
+    - react
+    - portal
+    - typescript
+  links:
+    - url: https://portal.iasolutions.co.uk
+      title: Portal
+      icon: dashboard
+spec:
+  type: website
+  lifecycle: production
+  owner: platform-team
+  system: devplatform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: eks-cluster
+  description: AWS EKS cluster for container orchestration
+  tags:
+    - aws
+    - kubernetes
+    - eks
+  links:
+    - url: https://console.aws.amazon.com/eks/home?region=eu-west-2#/clusters/devplatform-dev
+      title: AWS Console
+      icon: dashboard
+spec:
+  type: kubernetes-cluster
+  lifecycle: production
+  owner: platform-team
+  system: devplatform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: platform-database
+  description: PostgreSQL database for platform metadata
+  tags:
+    - aws
+    - rds
+    - postgresql
+  links:
+    - url: https://console.aws.amazon.com/rds/home?region=eu-west-2
+      title: AWS Console
+      icon: dashboard
+spec:
+  type: database
+  lifecycle: production
+  owner: platform-team
+  system: devplatform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: prometheus
+  description: Metrics collection and monitoring
+  annotations:
+    backstage.io/kubernetes-id: prometheus
+    backstage.io/kubernetes-namespace: prometheus
+  tags:
+    - monitoring
+    - metrics
+  links:
+    - url: https://prometheus.iasolutions.co.uk
+      title: Prometheus UI
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: devplatform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: grafana
+  description: Monitoring dashboards and visualization
+  annotations:
+    backstage.io/kubernetes-id: grafana
+    backstage.io/kubernetes-namespace: grafana
+  tags:
+    - monitoring
+    - dashboards
+  links:
+    - url: https://grafana.iasolutions.co.uk
+      title: Grafana Dashboards
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: devplatform

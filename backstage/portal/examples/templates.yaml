@@ -1,0 +1,166 @@
+---
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: kubernetes-service-template
+  title: New Kubernetes Service
+  description: Create a new service on the platform
+  tags:
+    - platform
+    - kubernetes
+    - service
+spec:
+  owner: platform-team
+  type: service
+  parameters:
+    - title: Service Information
+      required:
+        - name
+        - description
+        - team
+      properties:
+        name:
+          title: Service Name
+          type: string
+          description: Name of the service (lowercase, no spaces)
+          pattern: '^[a-z][a-z0-9-]*[a-z0-9]$'
+        description:
+          title: Description
+          type: string
+          description: Brief description of the service
+        team:
+          title: Team
+          type: string
+          description: Team that owns this service
+        namespace:
+          title: Kubernetes Namespace
+          type: string
+          description: Kubernetes namespace (will be created if it doesn't exist)
+          default: ${{ parameters.team }}-${{ parameters.name }}
+    - title: Configuration
+      properties:
+        port:
+          title: Service Port
+          type: number
+          description: Port the service will listen on
+          default: 8080
+        replicas:
+          title: Replicas
+          type: number
+          description: Number of pod replicas
+          default: 2
+          minimum: 1
+          maximum: 10
+  steps:
+    - id: log-message
+      name: Log Service Request
+      action: debug:log
+      input:
+        message: |
+          Creating service '${{ parameters.name }}' for team '${{ parameters.team }}'
+          Namespace: ${{ parameters.namespace }}
+          Port: ${{ parameters.port }}
+          Replicas: ${{ parameters.replicas }}
+          Description: ${{ parameters.description }}
+          
+          This request would typically:
+          1. Create Kubernetes namespace: ${{ parameters.namespace }}
+          2. Deploy service with ${{ parameters.replicas }} replicas on port ${{ parameters.port }}
+          3. Set up monitoring and logging
+          4. Configure ingress and service discovery
+          5. Create catalog entry in Backstage
+          
+          Contact the platform team to provision this service.
+  output:
+    text:
+      - title: Service Request Summary
+        content: |
+          ## Service Request Created
+          
+          **Service**: ${{ parameters.name }}
+          **Team**: ${{ parameters.team }}
+          **Namespace**: ${{ parameters.namespace }}
+          **Port**: ${{ parameters.port }}
+          **Replicas**: ${{ parameters.replicas }}
+          
+          The platform team has been notified and will provision your service shortly.
+          You will receive confirmation once the service is deployed.
+---
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: tenant-request-template
+  title: Request New Tenant Environment
+  description: Request a new tenant environment with dedicated namespace
+  tags:
+    - platform
+    - tenant
+    - environment
+spec:
+  owner: platform-team
+  type: environment
+  parameters:
+    - title: Tenant Information
+      required:
+        - tenantName
+        - teamName
+        - environmentType
+      properties:
+        tenantName:
+          title: Tenant Name
+          type: string
+          description: Unique name for the tenant (lowercase, no spaces)
+          pattern: '^[a-z][a-z0-9-]*[a-z0-9]$'
+        teamName:
+          title: Team Name
+          type: string
+          description: Name of the team requesting the tenant
+        environmentType:
+          title: Environment Type
+          type: string
+          description: Type of environment
+          enum:
+            - development
+            - staging
+            - production
+          enumNames:
+            - Development
+            - Staging
+            - Production
+        description:
+          title: Description
+          type: string
+          description: Brief description of what this tenant will be used for
+  steps:
+    - id: create-tenant
+      name: Create Tenant Request
+      action: debug:log
+      input:
+        message: |
+          Creating tenant '${{ parameters.tenantName }}' for team '${{ parameters.teamName }}'
+          Environment: ${{ parameters.environmentType }}
+          Description: ${{ parameters.description }}
+          
+          This would typically create:
+          1. Kubernetes namespace: ${{ parameters.tenantName }}-${{ parameters.environmentType }}
+          2. Resource quotas and limits
+          3. Network policies
+          4. Monitoring and logging setup
+          5. Service accounts and RBAC
+          
+          Contact the platform team for provisioning.
+  output:
+    text:
+      - title: Tenant Request Summary
+        content: |
+          ## Tenant Environment Request
+          
+          **Tenant**: ${{ parameters.tenantName }}
+          **Team**: ${{ parameters.teamName }}
+          **Environment**: ${{ parameters.environmentType }}
+          **Description**: ${{ parameters.description }}
+          
+          Your tenant environment request has been submitted to the platform team.
+          Expected provisioning time: 10-15 minutes.
+          
+          You will receive access details once the environment is ready.

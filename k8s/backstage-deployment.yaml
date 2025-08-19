@@ -14,8 +14,12 @@ metadata:
   namespace: backstage
 type: Opaque
 stringData:
-  POSTGRES_USER: "backstage"
-  POSTGRES_PASSWORD: "your-backstage-db-password"
+  POSTGRES_USER: "platformadmin"
+  POSTGRES_PASSWORD: "9TtUU#T&-8q*T3fR"
+  POSTGRES_HOST: "devplatform-dev-db.cf4iiyuc2c46.eu-west-2.rds.amazonaws.com"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "platform"
+  POSTGRES_SSL: "require"
   AUTH_GITHUB_CLIENT_ID: "your-github-client-id"
   AUTH_GITHUB_CLIENT_SECRET: "your-github-client-secret"
 ---
@@ -59,7 +63,7 @@ metadata:
   name: backstage
   namespace: backstage
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: backstage
@@ -71,8 +75,8 @@ spec:
       serviceAccountName: backstage-sa
       securityContext:
         runAsNonRoot: true
-        runAsUser: 65534
-        fsGroup: 65534
+        runAsUser: 1000
+        fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       tolerations:
@@ -88,9 +92,9 @@ spec:
           protocol: TCP
         securityContext:
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
+          readOnlyRootFilesystem: false
           runAsNonRoot: true
-          runAsUser: 65534
+          runAsUser: 1000
           capabilities:
             drop:
             - ALL
@@ -105,6 +109,16 @@ spec:
             secretKeyRef:
               name: backstage-secrets
               key: POSTGRES_PASSWORD
+        - name: POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: backstage-secrets
+              key: POSTGRES_HOST
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: backstage-secrets
+              key: POSTGRES_DB
         - name: AUTH_GITHUB_CLIENT_ID
           valueFrom:
             secretKeyRef:
@@ -198,10 +212,10 @@ metadata:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:475641479654:certificate/8376e6c1-8fab-4fc7-bca0-1f48098dcb1d
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:475641479654:certificate/b226f7a0-dde8-49af-b79a-1770022c223b
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
-    alb.ingress.kubernetes.io/security-groups: sg-your-security-group
+    alb.ingress.kubernetes.io/security-groups: sg-0d5ff0a3f0fdee85a
 spec:
   rules:
   - host: portal.iasolutions.co.uk

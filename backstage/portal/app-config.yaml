@@ -3,7 +3,7 @@ app:
   baseUrl: https://portal.iasolutions.co.uk
 
 organization:
-  name: DevPlatform
+  name: Platform Engineering
 
 backend:
   baseUrl: https://portal.iasolutions.co.uk
@@ -17,12 +17,16 @@ backend:
     methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
     credentials: true
   database:
-    client: better-sqlite3
-    connection: ':memory:'
-  reading:
-    allow:
-      - host: raw.githubusercontent.com
-      - host: github.com
+    client: pg
+    connection:
+      host: ${POSTGRES_HOST}
+      port: ${POSTGRES_PORT}
+      user: ${POSTGRES_USER}
+      password: ${POSTGRES_PASSWORD}
+      database: ${POSTGRES_DB}
+      ssl:
+        require: true
+        rejectUnauthorized: false
 
 proxy:
   endpoints:
@@ -43,16 +47,19 @@ catalog:
   rules:
     - allow: [Component, System, API, Resource, Location, User, Group, Template]
   locations:
+    # Platform components - fixed path
     - type: file
-      target: ./examples/entities.yaml
+      target: ./examples/platform-components.yaml
+    # Software templates - fixed path
+    - type: file
+      target: ./examples/templates.yaml
+      rules:
+        - allow: [Template]
+    # Organization - fixed path
     - type: file
       target: ./examples/org.yaml
-    - type: file
-      target: ./examples/devplatform-api.yaml
-    - type: file
-      target: ./examples/devplatform-system.yaml
-    - type: file
-      target: ./examples/devplatform-template.yaml
+      rules:
+        - allow: [User, Group]
 
 techdocs:
   builder: 'local'
@@ -78,7 +85,6 @@ kubernetes:
   clusterLocatorMethods:
     - type: 'config'
       clusters:
-        - url: https://25A9E2A57845EBAA9E8011ECC61ED398.gr7.eu-west-2.eks.amazonaws.com
+        - url: https://5AF1C146F9DBE81926EC3854AE58F151.gr7.eu-west-2.eks.amazonaws.com
           name: devplatform-dev
           authProvider: 'aws'
-          

@@ -14,7 +14,7 @@ metadata:
   namespace: platform-api
 type: Opaque
 stringData:
-  DATABASE_URL: "postgres://username:password@your-db-host:5432/platform?sslmode=require"
+  DATABASE_URL: "postgresql://platformadmin:9TtUU%23T%26-8q%2AT3fR@devplatform-dev-db.cf4iiyuc2c46.eu-west-2.rds.amazonaws.com:5432/platform"
   JWT_SECRET: "your-secure-jwt-secret-here"
 ---
 apiVersion: v1
@@ -195,10 +195,10 @@ metadata:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:475641479654:certificate/8376e6c1-8fab-4fc7-bca0-1f48098dcb1d
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:475641479654:certificate/b226f7a0-dde8-49af-b79a-1770022c223b
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
-    alb.ingress.kubernetes.io/security-groups: sg-your-security-group
+    alb.ingress.kubernetes.io/security-groups: sg-0d5ff0a3f0fdee85a
 spec:
   rules:
   - host: api.iasolutions.co.uk

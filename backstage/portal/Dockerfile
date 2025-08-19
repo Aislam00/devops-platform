@@ -26,13 +26,14 @@ ENV NODE_OPTIONS="--no-node-snapshot"
 # Copy skeleton first for dependency installation
 COPY --chown=node:node yarn.lock package.json packages/backend/dist/skeleton.tar.gz ./
 RUN tar xzf skeleton.tar.gz && rm skeleton.tar.gz
-# Install dependencies
+# Install dependencies (use --frozen-lockfile instead of --immutable for Docker)
 RUN --mount=type=cache,target=/home/node/.cache/yarn,sharing=locked,uid=1000,gid=1000 \
     yarn workspaces focus --all --production && rm -rf "$(yarn cache clean)"
 # Copy examples and configs
 COPY --chown=node:node examples ./examples
-COPY --chown=node:node packages/backend/dist/bundle.tar.gz app-config.yaml ./
+COPY --chown=node:node packages/backend/dist/bundle.tar.gz app-config*.yaml ./
 # Extract bundle
 RUN tar xzf bundle.tar.gz && rm bundle.tar.gz
 EXPOSE 7007
-CMD ["node", "packages/backend", "--config", "app-config.yaml"]
+# Start the Backstage backend properly
+CMD ["node", "packages/backend/dist/index.cjs.js", "--config", "app-config.yaml"]
