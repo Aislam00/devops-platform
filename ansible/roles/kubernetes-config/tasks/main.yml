@@ -1,3 +1,12 @@
+- name: Get AWS account ID
+  shell: aws sts get-caller-identity --query Account --output text
+  register: aws_account_result
+  delegate_to: localhost
+
+- name: Set account ID fact
+  set_fact:
+    ansible_aws_account_id: "{{ aws_account_result.stdout }}"
+
 - name: Ensure kubectl is configured
   shell: |
     aws eks --region {{ aws_region }} update-kubeconfig --name {{ cluster_name }}
@@ -18,14 +27,14 @@
         name: platform-admin
       rules:
         - apiGroups: [""]
-          resources: ["*"]
-          verbs: ["*"]
+          resources: ["pods", "services", "configmaps", "secrets", "namespaces"]
+          verbs: ["get", "list", "create", "update", "patch", "delete"]
         - apiGroups: ["apps"]
-          resources: ["*"]
-          verbs: ["*"]
+          resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+          verbs: ["get", "list", "create", "update", "patch", "delete"]
         - apiGroups: ["networking.k8s.io"]
-          resources: ["*"]
-          verbs: ["*"]
+          resources: ["ingresses", "networkpolicies"]
+          verbs: ["get", "list", "create", "update", "patch", "delete"]
           
 - name: Create service account for platform API
   kubernetes.core.k8s:
@@ -36,7 +45,7 @@
         name: platform-api
         namespace: platform-system
         annotations:
-          eks.amazonaws.com/role-arn: "arn:aws:iam::475641479654:role/devplatform-dev-platform-api-role"
+          eks.amazonaws.com/role-arn: "arn:aws:iam::{{ ansible_aws_account_id }}:role/devplatform-dev-platform-api-role"
           
 - name: Bind platform service account to cluster role
   kubernetes.core.k8s:

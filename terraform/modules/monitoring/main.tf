@@ -1,5 +1,10 @@
+data "aws_eks_cluster" "cluster" {
+  name = var.cluster_name
+}
+
 resource "aws_prometheus_workspace" "main" {
   alias = "${var.project_name}-${var.environment}-prometheus"
+  tags  = var.tags
 }
 
 data "aws_iam_policy_document" "prometheus_ingest_assume_role" {
@@ -26,6 +31,7 @@ data "aws_iam_policy_document" "prometheus_ingest_assume_role" {
 resource "aws_iam_role" "prometheus_ingest" {
   name               = "${var.project_name}-${var.environment}-prometheus-ingest"
   assume_role_policy = data.aws_iam_policy_document.prometheus_ingest_assume_role.json
+  tags               = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "prometheus_ingest" {
@@ -36,6 +42,11 @@ resource "aws_iam_role_policy_attachment" "prometheus_ingest" {
 resource "kubernetes_namespace" "prometheus" {
   metadata {
     name = "prometheus"
+    labels = {
+      "pod-security.kubernetes.io/enforce" = "restricted"
+      "pod-security.kubernetes.io/audit"   = "restricted"
+      "pod-security.kubernetes.io/warn"    = "restricted"
+    }
   }
 }
 
@@ -107,8 +118,24 @@ resource "helm_release" "prometheus" {
             effect   = "NoSchedule"
           }
         ]
+        securityContext = {
+          runAsNonRoot = true
+          runAsUser    = 65534
+          runAsGroup   = 65534
+          fsGroup      = 65534
+        }
+        resources = {
+          requests = {
+            memory = "512Mi"
+            cpu    = "200m"
+          }
+          limits = {
+            memory = "2Gi"
+            cpu    = "1000m"
+          }
+        }
       }
-      kube-state-metrics = {
+      "kube-state-metrics" = {
         tolerations = [
           {
             key      = "platform-services"
@@ -139,7 +166,7 @@ resource "helm_release" "grafana" {
     value = "false"
   }
 
-  set {
+  set_sensitive {
     name  = "adminPassword"
     value = random_password.grafana_admin.result
   }
@@ -154,6 +181,22 @@ resource "helm_release" "grafana" {
           effect   = "NoSchedule"
         }
       ]
+      securityContext = {
+        runAsNonRoot = true
+        runAsUser    = 472
+        runAsGroup   = 472
+        fsGroup      = 472
+      }
+      resources = {
+        requests = {
+          memory = "256Mi"
+          cpu    = "100m"
+        }
+        limits = {
+          memory = "1Gi"
+          cpu    = "500m"
+        }
+      }
       datasources = {
         "datasources.yaml" = {
           apiVersion = 1
@@ -179,12 +222,14 @@ resource "kubernetes_ingress_v1" "grafana" {
     name      = "grafana-ingress"
     namespace = kubernetes_namespace.prometheus.metadata[0].name
     annotations = {
-      "kubernetes.io/ingress.class"               = "alb"
-      "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"     = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn" = var.certificate_arn
-      "alb.ingress.kubernetes.io/listen-ports"    = "[{\"HTTP\": 80}, {\"HTTPS\": 443}]"
-      "alb.ingress.kubernetes.io/ssl-redirect"    = "443"
+      "kubernetes.io/ingress.class"                        = "alb"
+      "alb.ingress.kubernetes.io/scheme"                   = "internet-facing"
+      "alb.ingress.kubernetes.io/target-type"              = "ip"
+      "alb.ingress.kubernetes.io/certificate-arn"          = var.certificate_arn
+      "alb.ingress.kubernetes.io/listen-ports"             = "[{\"HTTP\": 80}, {\"HTTPS\": 443}]"
+      "alb.ingress.kubernetes.io/ssl-redirect"             = "443"
+      "alb.ingress.kubernetes.io/load-balancer-attributes" = "deletion_protection.enabled=true"
+      "alb.ingress.kubernetes.io/tags"                     = "Environment=${var.environment},Project=${var.project_name},ManagedBy=terraform"
     }
   }
 
@@ -216,12 +261,14 @@ resource "kubernetes_ingress_v1" "prometheus" {
     name      = "prometheus-ingress"
     namespace = kubernetes_namespace.prometheus.metadata[0].name
     annotations = {
-      "kubernetes.io/ingress.class"               = "alb"
-      "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"     = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn" = var.certificate_arn
-      "alb.ingress.kubernetes.io/listen-ports"    = "[{\"HTTP\": 80}, {\"HTTPS\": 443}]"
-      "alb.ingress.kubernetes.io/ssl-redirect"    = "443"
+      "kubernetes.io/ingress.class"                        = "alb"
+      "alb.ingress.kubernetes.io/scheme"                   = "internet-facing"
+      "alb.ingress.kubernetes.io/target-type"              = "ip"
+      "alb.ingress.kubernetes.io/certificate-arn"          = var.certificate_arn
+      "alb.ingress.kubernetes.io/listen-ports"             = "[{\"HTTP\": 80}, {\"HTTPS\": 443}]"
+      "alb.ingress.kubernetes.io/ssl-redirect"             = "443"
+      "alb.ingress.kubernetes.io/load-balancer-attributes" = "deletion_protection.enabled=true"
+      "alb.ingress.kubernetes.io/tags"                     = "Environment=${var.environment},Project=${var.project_name},ManagedBy=terraform"
     }
   }
 

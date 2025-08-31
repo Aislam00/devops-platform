@@ -39,22 +39,22 @@ variable "node_policy_attachments" {
 
 variable "vpc_cni_version" {
   type    = string
-  default = "v1.15.1-eksbuild.1"
+  default = "v1.18.1-eksbuild.1"
 }
 
 variable "coredns_version" {
   type    = string
-  default = "v1.10.1-eksbuild.5"
+  default = "v1.10.1-eksbuild.7"
 }
 
 variable "kube_proxy_version" {
   type    = string
-  default = "v1.28.2-eksbuild.2"
+  default = "v1.28.8-eksbuild.5"
 }
 
 variable "ebs_csi_version" {
   type    = string
-  default = "v1.24.0-eksbuild.1"
+  default = "v1.30.0-eksbuild.1"
 }
 
 variable "vpc_cni_role_arn" {
@@ -63,4 +63,9 @@ variable "vpc_cni_role_arn" {
 
 variable "ebs_csi_role_arn" {
   type = string
+}
+
+variable "ssh_key_name" {
+  type    = string
+  default = null
 }

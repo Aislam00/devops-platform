@@ -124,11 +124,83 @@ resource "aws_iam_role_policy_attachment" "ebs_csi" {
 
 resource "aws_kms_key" "eks" {
   deletion_window_in_days = 7
+  enable_key_rotation     = true
 }
 
 resource "aws_kms_alias" "eks" {
   name          = "alias/${local.cluster_name}"
   target_key_id = aws_kms_key.eks.key_id
+}
+
+data "aws_iam_policy_document" "platform_api_assume_role" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+    }
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:platform-api:platform-api-sa"]
+    }
+  }
+}
+
+resource "aws_iam_role" "platform_api" {
+  name               = "${local.cluster_name}-platform-api-role"
+  assume_role_policy = data.aws_iam_policy_document.platform_api_assume_role.json
+}
+
+resource "aws_iam_policy" "platform_api" {
+  name = "${local.cluster_name}-platform-api-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "eks:DescribeCluster"
+        ]
+        Resource = module.eks.cluster_arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ce:GetCostAndUsage"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "platform_api" {
+  policy_arn = aws_iam_policy.platform_api.arn
+  role       = aws_iam_role.platform_api.name
+}
+
+data "aws_iam_policy_document" "backstage_assume_role" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+    }
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:backstage:backstage-sa"]
+    }
+  }
+}
+
+resource "aws_iam_role" "backstage" {
+  name               = "${local.cluster_name}-backstage-role"
+  assume_role_policy = data.aws_iam_policy_document.backstage_assume_role.json
 }
 
 data "aws_iam_policy_document" "aws_load_balancer_controller_assume_role" {
@@ -166,101 +238,31 @@ resource "aws_iam_policy" "aws_load_balancer_controller" {
       {
         Effect = "Allow"
         Action = [
-          "iam:CreateServiceLinkedRole"
-        ]
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "iam:AWSServiceName" = "elasticloadbalancing.amazonaws.com"
-          }
-        }
-      },
-      {
-        Effect = "Allow"
-        Action = [
           "ec2:DescribeAccountAttributes",
           "ec2:DescribeAddresses",
           "ec2:DescribeAvailabilityZones",
           "ec2:DescribeInternetGateways",
           "ec2:DescribeVpcs",
-          "ec2:DescribeVpcPeeringConnections",
           "ec2:DescribeSubnets",
           "ec2:DescribeSecurityGroups",
           "ec2:DescribeInstances",
           "ec2:DescribeNetworkInterfaces",
           "ec2:DescribeTags",
           "ec2:CreateTags",
-          "ec2:DeleteTags", "ec2:GetCoipPoolUsage",
-          "ec2:GetManagedPrefixListEntries",
-          "ec2:DescribeCoipPools",
-          "ec2:AuthorizeSecurityGroupIngress",
-          "ec2:RevokeSecurityGroupIngress",
-          "ec2:AuthorizeSecurityGroupEgress",
-          "ec2:RevokeSecurityGroupEgress",
-          "ec2:CreateSecurityGroup",
-          "ec2:DeleteSecurityGroup",
-          "ec2:ModifySecurityGroupRules",
-          "elasticloadbalancing:DescribeLoadBalancers",
-          "elasticloadbalancing:DescribeLoadBalancerAttributes",
-          "elasticloadbalancing:DescribeListeners",
-          "elasticloadbalancing:DescribeListenerAttributes",
-          "elasticloadbalancing:DescribeListenerCertificates",
-          "elasticloadbalancing:DescribeSSLPolicies",
-          "elasticloadbalancing:DescribeRules",
-          "elasticloadbalancing:DescribeTargetGroups",
-          "elasticloadbalancing:DescribeTargetGroupAttributes",
-          "elasticloadbalancing:DescribeTargetHealth",
-          "elasticloadbalancing:DescribeTags",
-          "elasticloadbalancing:CreateListener",
-          "elasticloadbalancing:DeleteListener",
-          "elasticloadbalancing:CreateRule",
-          "elasticloadbalancing:DeleteRule",
-          "elasticloadbalancing:SetWebAcl",
-          "elasticloadbalancing:ModifyListener",
-          "elasticloadbalancing:AddListenerCertificates",
-          "elasticloadbalancing:RemoveListenerCertificates",
-          "elasticloadbalancing:ModifyRule",
-          "elasticloadbalancing:CreateLoadBalancer",
-          "elasticloadbalancing:CreateTargetGroup",
-          "elasticloadbalancing:DeleteLoadBalancer",
-          "elasticloadbalancing:DeleteTargetGroup",
-          "elasticloadbalancing:ModifyLoadBalancerAttributes",
-          "elasticloadbalancing:ModifyTargetGroup",
-          "elasticloadbalancing:ModifyTargetGroupAttributes",
-          "elasticloadbalancing:RegisterTargets",
-          "elasticloadbalancing:DeregisterTargets",
-          "elasticloadbalancing:SetIpAddressType",
-          "elasticloadbalancing:SetSecurityGroups",
-          "elasticloadbalancing:SetSubnets",
-          "elasticloadbalancing:AddTags",
-          "elasticloadbalancing:RemoveTags"
+          "ec2:DeleteTags",
+          "elasticloadbalancing:*"
         ]
         Resource = "*"
       },
       {
         Effect = "Allow"
         Action = [
-          "cognito-idp:DescribeUserPoolClient",
           "acm:ListCertificates",
           "acm:DescribeCertificate",
-          "iam:ListServerCertificates",
-          "iam:GetServerCertificate",
-          "waf-regional:GetWebACL",
-          "waf-regional:GetWebACLForResource",
-          "waf-regional:AssociateWebACL",
-          "waf-regional:DisassociateWebACL",
-          "wafv2:GetWebACL",
-          "wafv2:GetWebACLForResource",
-          "wafv2:AssociateWebACL",
-          "wafv2:DisassociateWebACL",
-          "shield:DescribeProtection",
-          "shield:DescribeSubscription",
-          "shield:GetSubscriptionState",
           "route53:ListHostedZones",
           "route53:ListResourceRecordSets",
           "route53:ChangeResourceRecordSets",
-          "route53:GetChange",
-          "route53:GetHostedZone"
+          "route53:GetChange"
         ]
         Resource = "*"
       }
@@ -271,4 +273,79 @@ resource "aws_iam_policy" "aws_load_balancer_controller" {
 resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
   policy_arn = aws_iam_policy.aws_load_balancer_controller.arn
   role       = aws_iam_role.aws_load_balancer_controller.name
+}
+
+data "aws_iam_policy_document" "platform_api_secrets_policy" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret"
+    ]
+    resources = [
+      "arn:aws:secretsmanager:${var.aws_region}:${local.account_id}:secret:${var.project_name}-${var.environment}-jwt-secret-*",
+      "arn:aws:secretsmanager:${var.aws_region}:${local.account_id}:secret:${var.project_name}-${var.environment}-database-connection-*"
+    ]
+  }
+}
+
+data "aws_iam_policy_document" "backstage_secrets_policy" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret"
+    ]
+    resources = [
+      "arn:aws:secretsmanager:${var.aws_region}:${local.account_id}:secret:${var.project_name}-${var.environment}-database-connection-*"
+    ]
+  }
+}
+
+resource "aws_iam_policy" "platform_api_secrets" {
+  name   = "${var.project_name}-${var.environment}-platform-api-secrets-policy"
+  policy = data.aws_iam_policy_document.platform_api_secrets_policy.json
+}
+
+resource "aws_iam_policy" "backstage_secrets" {
+  name   = "${var.project_name}-${var.environment}-backstage-secrets-policy"
+  policy = data.aws_iam_policy_document.backstage_secrets_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "platform_api_secrets" {
+  role       = aws_iam_role.platform_api.name
+  policy_arn = aws_iam_policy.platform_api_secrets.arn
+}
+
+resource "aws_iam_role_policy_attachment" "backstage_secrets" {
+  role       = aws_iam_role.backstage.name
+  policy_arn = aws_iam_policy.backstage_secrets.arn
+}
+
+data "aws_iam_policy_document" "aws_load_balancer_controller_ec2" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "ec2:CreateSecurityGroup",
+      "ec2:DeleteSecurityGroup",
+      "ec2:DescribeSecurityGroups",
+      "ec2:AuthorizeSecurityGroupIngress",
+      "ec2:RevokeSecurityGroupIngress",
+      "ec2:AuthorizeSecurityGroupEgress",
+      "ec2:RevokeSecurityGroupEgress",
+      "ec2:CreateTags",
+      "ec2:DeleteTags"
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "aws_load_balancer_controller_ec2" {
+  name   = "${var.project_name}-${var.environment}-load-balancer-controller-ec2-policy"
+  policy = data.aws_iam_policy_document.aws_load_balancer_controller_ec2.json
+}
+
+resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller_ec2" {
+  role       = aws_iam_role.aws_load_balancer_controller.name
+  policy_arn = aws_iam_policy.aws_load_balancer_controller_ec2.arn
 }

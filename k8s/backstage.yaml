@@ -1,0 +1,154 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backstage
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: aws-secrets-manager
+  namespace: backstage
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: eu-west-2
+      auth:
+        jwt:
+          serviceAccountRef:
+            name: backstage-sa
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backstage-secrets
+  namespace: backstage
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: SecretStore
+  target:
+    name: backstage-secrets
+    creationPolicy: Owner
+  dataFrom:
+  - extract:
+      key: devplatform-dev-database-connection-20250830210126428400000001
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backstage-sa
+  namespace: backstage
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::475641479654:role/devplatform-dev-backstage-role
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backstage
+  namespace: backstage
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backstage
+  template:
+    metadata:
+      labels:
+        app: backstage
+    spec:
+      serviceAccountName: backstage-sa
+      tolerations:
+      - key: platform-services
+        value: "true"
+        effect: NoSchedule
+        operator: Equal
+      containers:
+      - name: backstage
+        image: 475641479654.dkr.ecr.eu-west-2.amazonaws.com/devplatform-portalatest
+        ports:
+        - containerPort: 7007
+        env:
+        - name: POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: backstage-secrets
+              key: POSTGRES_HOST
+        - name: POSTGRES_PORT
+          valueFrom:
+            secretKeyRef:
+              name: backstage-secrets
+              key: POSTGRES_PORT
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: backstage-secrets
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: backstage-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: backstage-secrets
+              key: POSTGRES_PASSWORD
+        - name: NODE_ENV
+          value: "production"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 7007
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 7007
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backstage-service
+  namespace: backstage
+spec:
+  selector:
+    app: backstage
+  ports:
+  - port: 80
+    targetPort: 7007
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backstage-ingress
+  namespace: backstage
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:475641479654:certificate/2ffd316a-fda0-43c8-94e2-5c20c8245a91
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+spec:
+  ingressClassName: alb
+  rules:
+  - host: portal.iasolutions.co.uk
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: backstage-service
+            port:
+              number: 80

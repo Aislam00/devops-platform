@@ -18,13 +18,13 @@ on:
 
 env:
   AWS_REGION: eu-west-2
-  ECR_REGISTRY: 475641479654.dkr.ecr.eu-west-2.amazonaws.com
+  CLUSTER_NAME: devplatform-dev
 
 jobs:
   infrastructure:
     name: Deploy Infrastructure
     runs-on: ubuntu-latest
-    if: false
+    if: github.event.inputs.component == 'infrastructure' || github.event.inputs.component == 'all' || github.event.inputs.component == ''
     outputs:
       cluster-name: ${{ steps.terraform.outputs.cluster-name }}
     steps:
@@ -34,89 +34,31 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.5.0
+        terraform_version: 1.9.0
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Deploy Infrastructure
-      working-directory: terraform/infrastructure
+      working-directory: terraform/environments/dev
       run: |
         terraform init
-        terraform plan
-        terraform apply -auto-approve
+        terraform plan -out=tfplan
+        terraform apply tfplan
 
     - name: Get cluster name
       id: terraform
-      working-directory: terraform/infrastructure
+      working-directory: terraform/environments/dev
       run: |
         echo "cluster-name=$(terraform output -raw eks_cluster_name)" >> $GITHUB_OUTPUT
-
-  build-api:
-    name: Build API
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && (github.event.inputs.component == 'platform-api' || github.event.inputs.component == 'all' || github.event.inputs.component == '')
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
-    - name: Login to ECR
-      uses: aws-actions/amazon-ecr-login@v2
-
-    - name: Build and push API
-      run: |
-        cd platform-api
-        docker build -t $ECR_REGISTRY/devplatform-api:latest .
-        docker push $ECR_REGISTRY/devplatform-api:latest
-
-  build-portal:
-    name: Build Portal
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && (github.event.inputs.component == 'backstage' || github.event.inputs.component == 'all' || github.event.inputs.component == '')
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'yarn'
-        cache-dependency-path: backstage/portal/yarn.lock
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
-    - name: Login to ECR
-      uses: aws-actions/amazon-ecr-login@v2
-
-    - name: Build Backstage
-      run: |
-        cd backstage/portal
-        yarn install --frozen-lockfile
-        yarn build:backend --config app-config.yaml
-        docker build -t $ECR_REGISTRY/devplatform-portal:latest .
-        docker push $ECR_REGISTRY/devplatform-portal:latest
 
   deploy-api:
     name: Deploy API
     runs-on: ubuntu-latest
-    needs: [infrastructure, build-api]
+    needs: [infrastructure]
     if: always() && !failure() && github.ref == 'refs/heads/main' && (github.event.inputs.component == 'platform-api' || github.event.inputs.component == 'all' || github.event.inputs.component == '')
     steps:
     - name: Checkout
@@ -125,28 +67,27 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Setup kubectl
-      uses: azure/setup-kubectl@v3
+      uses: azure/setup-kubectl@v4
       with:
         version: v1.28.0
 
     - name: Update kubeconfig
       run: |
-        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ needs.infrastructure.outputs.cluster-name || 'devplatform-dev' }}
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
 
     - name: Deploy API
-      working-directory: terraform/infrastructure
       run: |
-        terraform apply -target=kubernetes_deployment.platform_api -auto-approve
+        kubectl apply -f k8s/platform-api.yaml
+        kubectl rollout status deployment/platform-api -n platform-api --timeout=300s
 
   deploy-portal:
     name: Deploy Portal
     runs-on: ubuntu-latest
-    needs: [infrastructure, build-portal, deploy-api]
+    needs: [infrastructure, deploy-api]
     if: always() && !failure() && github.ref == 'refs/heads/main' && (github.event.inputs.component == 'backstage' || github.event.inputs.component == 'all' || github.event.inputs.component == '')
     steps:
     - name: Checkout
@@ -155,20 +96,19 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Setup kubectl
-      uses: azure/setup-kubectl@v3
+      uses: azure/setup-kubectl@v4
       with:
         version: v1.28.0
 
     - name: Update kubeconfig
       run: |
-        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ needs.infrastructure.outputs.cluster-name || 'devplatform-dev' }}
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
 
     - name: Deploy Portal
       run: |
-        cd terraform/infrastructure
-        terraform apply -target=kubernetes_deployment.backstage -auto-approve
+        kubectl apply -f k8s/backstage.yaml
+        kubectl rollout status deployment/backstage -n backstage --timeout=300s

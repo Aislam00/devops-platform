@@ -20,8 +20,14 @@ func AuthRequired(jwtSecret string) gin.HandlerFunc {
 		}
 
 		bearerToken := strings.Split(authHeader, " ")
-		if len(bearerToken) != 2 || bearerToken[0] != "Bearer" {
+		if len(bearerToken) != 2 || bearerToken[0] != "Bearer" || len(bearerToken[1]) < 10 {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
+			c.Abort()
+			return
+		}
+
+		if len(bearerToken[1]) > 1000 {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token too long"})
 			c.Abort()
 			return
 		}
@@ -60,6 +66,10 @@ func AuthRequired(jwtSecret string) gin.HandlerFunc {
 }
 
 func GenerateToken(userID, username, jwtSecret string) (string, error) {
+	if len(jwtSecret) < 32 {
+		return "", fmt.Errorf("JWT secret too short")
+	}
+
 	claims := jwt.MapClaims{
 		"sub":      userID,
 		"username": username,

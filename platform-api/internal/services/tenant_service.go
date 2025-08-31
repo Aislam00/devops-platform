@@ -3,6 +3,7 @@ package services
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,6 +25,10 @@ func NewTenantService(db *sql.DB, k8sClient *k8s.Client) *TenantService {
 }
 
 func (s *TenantService) CreateTenant(req *models.CreateTenantRequest) (*models.TenantResponse, error) {
+	if err := validateTenantRequest(req); err != nil {
+		return nil, fmt.Errorf("validation failed: %v", err)
+	}
+
 	tenant := &models.Tenant{
 		ID:          uuid.New(),
 		Name:        req.Name,
@@ -36,12 +41,18 @@ func (s *TenantService) CreateTenant(req *models.CreateTenantRequest) (*models.T
 		UpdatedAt:   time.Now(),
 	}
 
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
 	query := `
 		INSERT INTO tenants (id, name, namespace, description, owner, email, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
-	_, err := s.db.Exec(query, tenant.ID, tenant.Name, tenant.Namespace,
+	_, err = tx.Exec(query, tenant.ID, tenant.Name, tenant.Namespace,
 		tenant.Description, tenant.Owner, tenant.Email, tenant.Status,
 		tenant.CreatedAt, tenant.UpdatedAt)
 	if err != nil {
@@ -49,11 +60,19 @@ func (s *TenantService) CreateTenant(req *models.CreateTenantRequest) (*models.T
 	}
 
 	if err := s.k8sClient.CreateNamespace(tenant.Namespace); err != nil {
-		s.updateTenantStatus(tenant.ID, "failed")
+		if updateErr := s.updateTenantStatus(tenant.ID, "failed"); updateErr != nil {
+			return nil, fmt.Errorf("failed to create namespace and update status: %v, %v", err, updateErr)
+		}
 		return nil, fmt.Errorf("failed to create namespace: %v", err)
 	}
 
-	s.updateTenantStatus(tenant.ID, "active")
+	if err := s.updateTenantStatus(tenant.ID, "active"); err != nil {
+		return nil, fmt.Errorf("failed to update tenant status: %v", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %v", err)
+	}
 
 	return &models.TenantResponse{
 		ID:          tenant.ID,
@@ -148,17 +167,23 @@ func (s *TenantService) DeleteTenant(id uuid.UUID) error {
 		return err
 	}
 
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
 	if err := s.k8sClient.DeleteNamespace(tenant.Namespace); err != nil {
 		return fmt.Errorf("failed to delete namespace: %v", err)
 	}
 
 	query := `DELETE FROM tenants WHERE id = $1`
-	_, err = s.db.Exec(query, id)
+	_, err = tx.Exec(query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete tenant: %v", err)
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (s *TenantService) updateTenantStatus(id uuid.UUID, status string) error {
@@ -183,9 +208,43 @@ func (s *TenantService) getTenantResources(namespace string) (*models.TenantReso
 	}, nil
 }
 
+func validateTenantRequest(req *models.CreateTenantRequest) error {
+	if len(req.Name) < 3 || len(req.Name) > 50 {
+		return fmt.Errorf("tenant name must be between 3 and 50 characters")
+	}
+
+	nameRegex := regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
+	if !nameRegex.MatchString(req.Name) {
+		return fmt.Errorf("tenant name can only contain alphanumeric characters and hyphens")
+	}
+
+	if len(req.Owner) < 2 || len(req.Owner) > 100 {
+		return fmt.Errorf("owner name must be between 2 and 100 characters")
+	}
+
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	if !emailRegex.MatchString(req.Email) {
+		return fmt.Errorf("invalid email format")
+	}
+
+	if len(req.Description) > 500 {
+		return fmt.Errorf("description must be less than 500 characters")
+	}
+
+	return nil
+}
+
 func generateNamespace(name string) string {
 	namespace := strings.ToLower(name)
 	namespace = strings.ReplaceAll(namespace, " ", "-")
 	namespace = strings.ReplaceAll(namespace, "_", "-")
+
+	reg := regexp.MustCompile(`[^a-z0-9-]`)
+	namespace = reg.ReplaceAllString(namespace, "")
+
+	if len(namespace) > 43 {
+		namespace = namespace[:43]
+	}
+
 	return fmt.Sprintf("tenant-%s", namespace)
 }

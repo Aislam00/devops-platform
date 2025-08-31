@@ -7,7 +7,7 @@ metadata:
     k8s-addon: cluster-autoscaler.addons.k8s.io
     k8s-app: cluster-autoscaler
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::475641479654:role/cluster-autoscaler
+    eks.amazonaws.com/role-arn: arn:aws:iam::{{ ansible_aws_account_id }}:role/cluster-autoscaler
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -113,4 +113,4 @@ spec:
         - --cloud-provider=aws
         - --skip-nodes-with-local-storage=false
         - --expander=least-waste
-        - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/devplatform-dev
+        - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/{{ cluster_name }}

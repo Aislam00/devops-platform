@@ -1,12 +1,11 @@
-# Terraform
 *.tfstate
 *.tfstate.*
 *.tfplan
 .terraform/
 .terraform.lock.hcl
-*.tfvars
+*.tfvars.backup
+*.tfvars.json
 
-# Go
 *.exe
 *.exe~
 *.dll
@@ -15,28 +14,38 @@
 *.test
 *.out
 go.work
+vendor/
 
-# Environment files
 .env
 .env.local
+.env.production
+.env.staging
 
-# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# OS
 .DS_Store
 Thumbs.db
 
-# Temporary files
-temp-rds-access.tf
-.env
-
-# Platform backups
 platform-backup-*/
 *.tar.gz
-aws-info/
+*.log
+*.tmp
 
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+kubeconfig
+*.pem
+*.key
+private_key.json
+
+scripts/deploy-k8s-secrets.sh
+terraform/infrastructure/terraform.tfvars
+platform-api/.env
 *.sh

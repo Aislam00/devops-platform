@@ -14,7 +14,6 @@ permissions:
 
 env:
   AWS_REGION: eu-west-2
-  AWS_ACCOUNT_ID: 475641479654
 
 jobs:
   test:
@@ -25,23 +24,24 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Setup Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: '1.22'
+        cache-dependency-path: platform-api/go.sum
 
     - name: Run tests
       run: |
         cd platform-api
         go mod tidy
-        go test ./...
+        go test -v -race -coverprofile=coverage.out ./...
 
     - name: Build binary
       run: |
         cd platform-api
-        go build -o platform-api cmd/server/main.go
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o platform-api cmd/server/main.go
 
   lint:
-    name: Lint & Validate Terraform
+    name: Lint & Validate
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -50,16 +50,21 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.5.0
+        terraform_version: 1.9.0
 
     - name: Terraform Format Check
       run: |
-        cd terraform/infrastructure
-        terraform fmt -check
+        find terraform -name "*.tf" -exec terraform fmt -check {} \;
 
-    - name: Terraform Validate
+    - name: Terraform Validate Backend
       run: |
-        cd terraform/infrastructure
+        cd terraform/backend
+        terraform init -backend=false
+        terraform validate
+
+    - name: Terraform Validate Environments
+      run: |
+        cd terraform/environments/dev
         terraform init -backend=false
         terraform validate
 
@@ -77,6 +82,7 @@ jobs:
         scan-ref: '.'
         format: 'sarif'
         output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
 
     - name: Upload Trivy scan results
       uses: github/codeql-action/upload-sarif@v3
@@ -88,7 +94,7 @@ jobs:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
     needs: [test, lint, security]
-
+    if: github.ref == 'refs/heads/main'
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -96,24 +102,35 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GitHubActionsRole
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Login to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Get account ID and terraform outputs
+      id: account
       run: |
-        aws ecr get-login-password --region $AWS_REGION \
-        | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+        echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
+        cd terraform/environments/dev
+        terraform init
+        echo "api_repo=$(terraform output -raw ecr_api_repository)" >> $GITHUB_OUTPUT
+        echo "portal_repo=$(terraform output -raw ecr_portal_repository)" >> $GITHUB_OUTPUT
 
     - name: Build & Push platform-api
       run: |
         cd platform-api
-        docker build -t platform-api .
-        docker tag platform-api:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/devplatform-api:latest
-        docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/devplatform-api:latest
+        docker build --platform linux/amd64 -t platform-api .
+        docker tag platform-api:latest ${{ steps.account.outputs.api_repo }}:latest
+        docker tag platform-api:latest ${{ steps.account.outputs.api_repo }}:${{ github.sha }}
+        docker push ${{ steps.account.outputs.api_repo }}:latest
+        docker push ${{ steps.account.outputs.api_repo }}:${{ github.sha }}
 
     - name: Build & Push devplatform-portal
       run: |
         cd backstage
-        docker build -t devplatform-portal .
-        docker tag devplatform-portal:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/devplatform-portal:latest
-        docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/devplatform-portal:latest
+        docker build --platform linux/amd64 -t devplatform-portal .
+        docker tag devplatform-portal:latest ${{ steps.account.outputs.portal_repo }}:latest
+        docker tag devplatform-portal:latest ${{ steps.account.outputs.portal_repo }}:${{ github.sha }}
+        docker push ${{ steps.account.outputs.portal_repo }}:latest
+        docker push ${{ steps.account.outputs.portal_repo }}:${{ github.sha }}

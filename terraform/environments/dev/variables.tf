@@ -33,6 +33,11 @@ variable "private_subnet_cidrs" {
   default = ["10.0.10.0/24", "10.0.20.0/24", "10.0.30.0/24"]
 }
 
+variable "allowed_cidr_blocks" {
+  type    = list(string)
+  default = ["10.0.0.0/16"]
+}
+
 variable "kubernetes_version" {
   type    = string
   default = "1.28"
@@ -69,17 +74,21 @@ variable "db_max_allocated_storage" {
 }
 
 variable "portal_dns_record" {
-  type = string
+  type    = string
+  default = "portal-alb.eu-west-2.elb.amazonaws.com"
 }
 
 variable "api_dns_record" {
-  type = string
+  type    = string
+  default = "api-alb.eu-west-2.elb.amazonaws.com"
 }
 
 variable "grafana_dns_record" {
-  type = string
+  type    = string
+  default = "grafana-alb.eu-west-2.elb.amazonaws.com"
 }
 
 variable "prometheus_dns_record" {
-  type = string
+  type    = string
+  default = "prometheus-alb.eu-west-2.elb.amazonaws.com"
 }

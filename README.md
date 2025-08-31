@@ -57,7 +57,7 @@ cd terraform/backend
 terraform init && terraform apply
 
 # Deploy infrastructure
-cd ../infrastructure
+cd ../environments/dev
 terraform init && terraform apply
 
 # Configure kubectl

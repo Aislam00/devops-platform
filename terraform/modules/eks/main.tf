@@ -8,6 +8,7 @@ resource "aws_eks_cluster" "main" {
     endpoint_private_access = true
     endpoint_public_access  = true
     public_access_cidrs     = ["0.0.0.0/0"]
+    security_group_ids      = [aws_security_group.cluster_additional.id]
   }
 
   encryption_config {
@@ -22,6 +23,45 @@ resource "aws_eks_cluster" "main" {
   depends_on = [
     var.cluster_policy_attachments
   ]
+
+  tags = {
+    Name = var.cluster_name
+  }
+}
+
+resource "aws_security_group" "cluster_additional" {
+  name_prefix = "${var.cluster_name}-cluster-additional-"
+  vpc_id      = data.aws_subnet.private[0].vpc_id
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/16"]
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/16"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["10.0.0.0/16"]
+  }
+
+  tags = {
+    Name = "${var.cluster_name}-cluster-additional-sg"
+  }
+}
+
+data "aws_subnet" "private" {
+  count = length(var.private_subnet_ids)
+  id    = var.private_subnet_ids[count.index]
 }
 
 resource "aws_eks_node_group" "platform_services" {
@@ -31,20 +71,21 @@ resource "aws_eks_node_group" "platform_services" {
   subnet_ids      = var.private_subnet_ids
 
   capacity_type  = "SPOT"
-  instance_types = ["t3.medium", "t3a.medium"]
+  instance_types = ["t3.medium", "t3a.medium", "t3.large"]
 
   scaling_config {
     desired_size = 2
-    max_size     = 4
+    max_size     = 6
     min_size     = 1
   }
 
   update_config {
-    max_unavailable = 1
+    max_unavailable_percentage = 25
   }
 
-  ami_type  = "AL2_x86_64"
-  disk_size = 20
+  ami_type             = "AL2_x86_64"
+  disk_size            = 30
+  force_update_version = false
 
   labels = {
     role = "platform-services"
@@ -60,6 +101,10 @@ resource "aws_eks_node_group" "platform_services" {
   depends_on = [
     var.node_policy_attachments
   ]
+
+  tags = {
+    Name = "${var.cluster_name}-platform-services"
+  }
 }
 
 resource "aws_eks_node_group" "tenant_workloads" {
@@ -73,16 +118,17 @@ resource "aws_eks_node_group" "tenant_workloads" {
 
   scaling_config {
     desired_size = 1
-    max_size     = 6
+    max_size     = 10
     min_size     = 0
   }
 
   update_config {
-    max_unavailable = 1
+    max_unavailable_percentage = 25
   }
 
-  ami_type  = "AL2_x86_64"
-  disk_size = 20
+  ami_type             = "AL2_x86_64"
+  disk_size            = 20
+  force_update_version = false
 
   labels = {
     role = "tenant-workloads"
@@ -92,6 +138,10 @@ resource "aws_eks_node_group" "tenant_workloads" {
   depends_on = [
     var.node_policy_attachments
   ]
+
+  tags = {
+    Name = "${var.cluster_name}-tenant-workloads"
+  }
 }
 
 resource "aws_eks_addon" "vpc_cni" {

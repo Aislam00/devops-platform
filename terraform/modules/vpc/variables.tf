@@ -17,3 +17,8 @@ variable "private_subnet_cidrs" {
 variable "cluster_name" {
   type = string
 }
+
+variable "tags" {
+  type    = map(string)
+  default = {}
+}

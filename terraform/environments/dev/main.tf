@@ -1,51 +1,38 @@
 terraform {
+  required_version = ">= 1.5.0"
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.1"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.17"
-    }
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 2.38"
     }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.15"
+    }
     tls = {
       source  = "hashicorp/tls"
-      version = "~> 4.1"
+      version = "~> 4.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
     }
   }
 
-  backend "s3" {
-    bucket         = "devplatform-terraform-state-475641479654"
-    key            = "infrastructure/terraform.tfstate"
-    region         = "eu-west-2"
-    dynamodb_table = "devplatform-terraform-locks"
-    encrypt        = true
-  }
+  backend "s3" {}
 }
 
 provider "aws" {
   region = var.aws_region
-}
 
-#provider "helm" {
-#  kubernetes {
-#    host                   = module.eks.cluster_endpoint
-#    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-#    exec {
-#      api_version = "client.authentication.k8s.io/v1beta1"
-#      command     = "aws"
-#      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
-#    }
-#  }
-#}
+  default_tags {
+    tags = local.common_tags
+  }
+}
 
 provider "kubernetes" {
   host                   = module.eks.cluster_endpoint
@@ -57,7 +44,20 @@ provider "kubernetes" {
   }
 }
 
+provider "helm" {
+  kubernetes {
+    host                   = module.eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+    }
+  }
+}
+
 data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
 
 data "aws_route53_zone" "main" {
   name         = var.domain_name
@@ -66,25 +66,28 @@ data "aws_route53_zone" "main" {
 
 locals {
   cluster_name = "${var.project_name}-${var.environment}"
+  account_id   = data.aws_caller_identity.current.account_id
   common_tags = {
     Project     = var.project_name
     Environment = var.environment
-    Cluster     = local.cluster_name
+    Owner       = var.owner
+    ManagedBy   = "terraform"
   }
 }
 
 module "vpc" {
-  source = "../modules/vpc"
+  source = "../../modules/vpc"
 
   vpc_name             = "${var.project_name}-${var.environment}"
   vpc_cidr             = var.vpc_cidr
   public_subnet_cidrs  = var.public_subnet_cidrs
   private_subnet_cidrs = var.private_subnet_cidrs
   cluster_name         = local.cluster_name
+  tags                 = local.common_tags
 }
 
 module "eks" {
-  source = "../modules/eks"
+  source = "../../modules/eks"
 
   cluster_name       = local.cluster_name
   cluster_role_arn   = aws_iam_role.eks_cluster.arn
@@ -116,7 +119,7 @@ module "eks" {
 }
 
 module "rds" {
-  source = "../modules/rds"
+  source = "../../modules/rds"
 
   db_name               = "${var.project_name}-${var.environment}-db"
   database_name         = var.database_name
@@ -128,7 +131,7 @@ module "rds" {
 
   vpc_id               = module.vpc.vpc_id
   vpc_cidr             = module.vpc.vpc_cidr_block
-  private_subnet_ids   = module.vpc.public_subnet_ids
+  private_subnet_ids   = module.vpc.private_subnet_ids
   db_subnet_group_name = "${var.project_name}-${var.environment}-db-subnet-group"
 
   backup_retention_period      = var.environment == "prod" ? 30 : 7
@@ -140,15 +143,71 @@ module "rds" {
 }
 
 module "monitoring" {
-  source = "../modules/monitoring"
+  source = "../../modules/monitoring"
 
   project_name      = var.project_name
   environment       = var.environment
+  cluster_name      = local.cluster_name
   oidc_provider_arn = aws_iam_openid_connect_provider.eks.arn
   oidc_issuer       = replace(module.eks.oidc_issuer_url, "https://", "")
   aws_region        = var.aws_region
   domain_name       = var.domain_name
   certificate_arn   = aws_acm_certificate_validation.platform.certificate_arn
+  tags              = local.common_tags
 
-  tags = local.common_tags
+  depends_on = [
+    module.eks,
+    aws_iam_openid_connect_provider.eks
+  ]
+}
+
+resource "random_password" "jwt_secret" {
+  length  = 64
+  special = true
+}
+
+resource "aws_secretsmanager_secret" "jwt_secret" {
+  name_prefix = "${var.project_name}-${var.environment}-jwt-secret-"
+}
+
+resource "aws_secretsmanager_secret_version" "jwt_secret" {
+  secret_id = aws_secretsmanager_secret.jwt_secret.id
+  secret_string = jsonencode({
+    JWT_SECRET = random_password.jwt_secret.result
+  })
+}
+
+resource "aws_secretsmanager_secret" "database_connection" {
+  name_prefix = "${var.project_name}-${var.environment}-database-connection-"
+}
+
+resource "aws_secretsmanager_secret_version" "database_connection" {
+  secret_id = aws_secretsmanager_secret.database_connection.id
+  secret_string = jsonencode({
+    DATABASE_URL      = "postgresql://${module.rds.master_username}:${urlencode(module.rds.db_password)}@${split(":", module.rds.db_instance_endpoint)[0]}:${module.rds.db_instance_port}/${module.rds.db_name}?sslmode=require"
+    POSTGRES_HOST     = split(":", module.rds.db_instance_endpoint)[0]
+    POSTGRES_PORT     = tostring(module.rds.db_instance_port)
+    POSTGRES_DB       = module.rds.db_name
+    POSTGRES_USER     = module.rds.master_username
+    POSTGRES_PASSWORD = module.rds.db_password
+    POSTGRES_SSL      = "require"
+  })
+}
+
+resource "aws_security_group_rule" "alb_https_inbound" {
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = var.allowed_cidr_blocks
+  security_group_id = module.eks.cluster_security_group_id
+}
+
+resource "aws_security_group_rule" "alb_http_inbound" {
+  type              = "ingress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  cidr_blocks       = var.allowed_cidr_blocks
+  security_group_id = module.eks.cluster_security_group_id
 }
