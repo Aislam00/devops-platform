@@ -46,7 +46,7 @@ jobs:
     - name: Deploy Infrastructure
       working-directory: terraform/environments/dev
       run: |
-        terraform init
+        terraform init -backend-config=backend.conf
         terraform plan -out=tfplan
         terraform apply tfplan
 

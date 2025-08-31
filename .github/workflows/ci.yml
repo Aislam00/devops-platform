@@ -10,7 +10,6 @@ permissions:
   contents: read
   security-events: write
   actions: read
-  id-token: write   
 
 env:
   AWS_REGION: eu-west-2
@@ -106,6 +105,11 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.9.0
+
     - name: Login to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v2
 
@@ -114,7 +118,7 @@ jobs:
       run: |
         echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
         cd terraform/environments/dev
-        terraform init
+        terraform init -backend-config=backend.conf
         echo "api_repo=$(terraform output -raw ecr_api_repository)" >> $GITHUB_OUTPUT
         echo "portal_repo=$(terraform output -raw ecr_portal_repository)" >> $GITHUB_OUTPUT
 
