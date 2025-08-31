@@ -11,31 +11,31 @@ output "rds_endpoint" {
 }
 
 output "jwt_secret_name" {
-  value = aws_secretsmanager_secret.jwt_secret.name
+  value = module.secrets.jwt_secret_name
 }
 
 output "database_secret_name" {
-  value = aws_secretsmanager_secret.database_connection.name
+  value = module.secrets.database_secret_name
 }
 
 output "platform_api_role_arn" {
-  value = aws_iam_role.platform_api.arn
+  value = module.iam.platform_api_role_arn
 }
 
 output "backstage_role_arn" {
-  value = aws_iam_role.backstage.arn
+  value = module.iam.backstage_role_arn
 }
 
 output "ecr_api_repository" {
-  value = aws_ecr_repository.platform_api.repository_url
+  value = module.ecr.api_repository_url
 }
 
 output "ecr_portal_repository" {
-  value = aws_ecr_repository.platform_portal.repository_url
+  value = module.ecr.portal_repository_url
 }
 
 output "ssl_certificate_arn" {
-  value = aws_acm_certificate_validation.platform.certificate_arn
+  value = module.route53.certificate_arn
 }
 
 output "platform_urls" {

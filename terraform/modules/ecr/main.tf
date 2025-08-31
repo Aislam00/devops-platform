@@ -4,6 +4,8 @@ resource "aws_ecr_repository" "platform_api" {
   image_scanning_configuration {
     scan_on_push = true
   }
+
+  tags = var.tags
 }
 
 resource "aws_ecr_repository" "platform_portal" {
@@ -12,4 +14,6 @@ resource "aws_ecr_repository" "platform_portal" {
   image_scanning_configuration {
     scan_on_push = true
   }
+
+  tags = var.tags
 }

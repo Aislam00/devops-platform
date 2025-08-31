@@ -12,6 +12,8 @@ resource "aws_acm_certificate" "platform" {
   lifecycle {
     create_before_destroy = true
   }
+
+  tags = var.tags
 }
 
 resource "aws_route53_record" "cert_validation" {
@@ -28,7 +30,7 @@ resource "aws_route53_record" "cert_validation" {
   records         = [each.value.record]
   ttl             = 60
   type            = each.value.type
-  zone_id         = data.aws_route53_zone.main.zone_id
+  zone_id         = var.hosted_zone_id
 }
 
 resource "aws_acm_certificate_validation" "platform" {
@@ -41,33 +43,35 @@ resource "aws_acm_certificate_validation" "platform" {
 }
 
 resource "aws_route53_record" "portal" {
-  zone_id = data.aws_route53_zone.main.zone_id
+  zone_id = var.hosted_zone_id
   name    = "portal.${var.domain_name}"
   type    = "CNAME"
   ttl     = 300
-  records = [var.portal_dns_record]
+  records = [var.portal_alb_hostname]
 }
 
 resource "aws_route53_record" "api" {
-  zone_id = data.aws_route53_zone.main.zone_id
+  zone_id = var.hosted_zone_id
   name    = "api.${var.domain_name}"
   type    = "CNAME"
   ttl     = 300
-  records = [var.api_dns_record]
+  records = [var.api_alb_hostname]
 }
 
 resource "aws_route53_record" "grafana" {
-  zone_id = data.aws_route53_zone.main.zone_id
+  count   = var.grafana_alb_hostname != null ? 1 : 0
+  zone_id = var.hosted_zone_id
   name    = "grafana.${var.domain_name}"
   type    = "CNAME"
   ttl     = 300
-  records = [var.grafana_dns_record]
+  records = [var.grafana_alb_hostname]
 }
 
 resource "aws_route53_record" "prometheus" {
-  zone_id = data.aws_route53_zone.main.zone_id
+  count   = var.prometheus_alb_hostname != null ? 1 : 0
+  zone_id = var.hosted_zone_id
   name    = "prometheus.${var.domain_name}"
   type    = "CNAME"
   ttl     = 300
-  records = [var.prometheus_dns_record]
+  records = [var.prometheus_alb_hostname]
 }

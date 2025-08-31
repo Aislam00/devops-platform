@@ -34,28 +34,6 @@ provider "aws" {
   }
 }
 
-provider "kubernetes" {
-  host                   = module.eks.cluster_endpoint
-  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
-  }
-}
-
-provider "helm" {
-  kubernetes {
-    host                   = module.eks.cluster_endpoint
-    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
-    }
-  }
-}
-
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
@@ -86,35 +64,46 @@ module "vpc" {
   tags                 = local.common_tags
 }
 
+module "iam" {
+  source = "../../modules/iam"
+
+  cluster_name       = local.cluster_name
+  project_name       = var.project_name
+  environment        = var.environment
+  aws_region         = var.aws_region
+  account_id         = local.account_id
+  oidc_provider_arn  = aws_iam_openid_connect_provider.eks.arn
+  oidc_issuer_url    = module.eks.oidc_issuer_url
+  cluster_arn        = module.eks.cluster_arn
+  tags               = local.common_tags
+
+  depends_on = [module.eks]
+}
+
 module "eks" {
   source = "../../modules/eks"
 
   cluster_name       = local.cluster_name
-  cluster_role_arn   = aws_iam_role.eks_cluster.arn
-  node_role_arn      = aws_iam_role.eks_node_group.arn
+  cluster_role_arn   = module.iam.eks_cluster_role_arn
+  node_role_arn      = module.iam.eks_node_group_role_arn
   public_subnet_ids  = module.vpc.public_subnet_ids
   private_subnet_ids = module.vpc.private_subnet_ids
   kubernetes_version = var.kubernetes_version
 
-  kms_key_arn = aws_kms_key.eks.arn
+  kms_key_arn = module.iam.eks_kms_key_arn
 
   cluster_policy_attachments = [
-    aws_iam_role_policy_attachment.eks_cluster_policy.id
+    module.iam.cluster_policy_attachment_id
   ]
 
-  node_policy_attachments = [
-    aws_iam_role_policy_attachment.eks_worker_node_policy.id,
-    aws_iam_role_policy_attachment.eks_cni_policy.id,
-    aws_iam_role_policy_attachment.eks_container_registry_policy.id
-  ]
+  node_policy_attachments = module.iam.node_policy_attachment_ids
 
-  vpc_cni_role_arn = aws_iam_role.vpc_cni.arn
-  ebs_csi_role_arn = aws_iam_role.ebs_csi.arn
+  vpc_cni_role_arn = module.iam.vpc_cni_role_arn
+  ebs_csi_role_arn = module.iam.ebs_csi_role_arn
 
   depends_on = [
     module.vpc,
-    aws_iam_role.eks_cluster,
-    aws_iam_role.eks_node_group
+    module.iam
   ]
 }
 
@@ -142,56 +131,61 @@ module "rds" {
   depends_on = [module.vpc]
 }
 
-module "monitoring" {
-  source = "../../modules/monitoring"
+module "ecr" {
+  source = "../../modules/ecr"
 
-  project_name      = var.project_name
-  environment       = var.environment
-  cluster_name      = local.cluster_name
-  oidc_provider_arn = aws_iam_openid_connect_provider.eks.arn
-  oidc_issuer       = replace(module.eks.oidc_issuer_url, "https://", "")
-  aws_region        = var.aws_region
-  domain_name       = var.domain_name
-  certificate_arn   = aws_acm_certificate_validation.platform.certificate_arn
-  tags              = local.common_tags
-
-  depends_on = [
-    module.eks,
-    aws_iam_openid_connect_provider.eks
-  ]
+  project_name = var.project_name
+  tags         = local.common_tags
 }
 
-resource "random_password" "jwt_secret" {
-  length  = 64
-  special = true
+module "secrets" {
+  source = "../../modules/secrets"
+
+  project_name         = var.project_name
+  environment          = var.environment
+  db_instance_endpoint = module.rds.db_instance_endpoint
+  db_instance_port     = module.rds.db_instance_port
+  db_name              = module.rds.db_name
+  db_master_username   = module.rds.master_username
+  db_password          = module.rds.db_password
+  tags                 = local.common_tags
+
+  depends_on = [module.rds]
 }
 
-resource "aws_secretsmanager_secret" "jwt_secret" {
-  name_prefix = "${var.project_name}-${var.environment}-jwt-secret-"
+module "route53" {
+  source = "../../modules/route53"
+
+  domain_name           = var.domain_name
+  hosted_zone_id        = data.aws_route53_zone.main.zone_id
+  api_alb_hostname      = var.api_dns_record
+  portal_alb_hostname   = var.portal_dns_record
+  grafana_alb_hostname  = var.grafana_dns_record
+  prometheus_alb_hostname = var.prometheus_dns_record
+  certificate_arn       = aws_acm_certificate_validation.platform.certificate_arn
+  tags                  = local.common_tags
 }
 
-resource "aws_secretsmanager_secret_version" "jwt_secret" {
-  secret_id = aws_secretsmanager_secret.jwt_secret.id
-  secret_string = jsonencode({
-    JWT_SECRET = random_password.jwt_secret.result
-  })
+provider "kubernetes" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+  }
 }
 
-resource "aws_secretsmanager_secret" "database_connection" {
-  name_prefix = "${var.project_name}-${var.environment}-database-connection-"
-}
-
-resource "aws_secretsmanager_secret_version" "database_connection" {
-  secret_id = aws_secretsmanager_secret.database_connection.id
-  secret_string = jsonencode({
-    DATABASE_URL      = "postgresql://${module.rds.master_username}:${urlencode(module.rds.db_password)}@${split(":", module.rds.db_instance_endpoint)[0]}:${module.rds.db_instance_port}/${module.rds.db_name}?sslmode=require"
-    POSTGRES_HOST     = split(":", module.rds.db_instance_endpoint)[0]
-    POSTGRES_PORT     = tostring(module.rds.db_instance_port)
-    POSTGRES_DB       = module.rds.db_name
-    POSTGRES_USER     = module.rds.master_username
-    POSTGRES_PASSWORD = module.rds.db_password
-    POSTGRES_SSL      = "require"
-  })
+provider "helm" {
+  kubernetes {
+    host                   = module.eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+    }
+  }
 }
 
 resource "aws_security_group_rule" "alb_https_inbound" {

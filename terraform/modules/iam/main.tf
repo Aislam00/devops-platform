@@ -10,8 +10,9 @@ data "aws_iam_policy_document" "eks_cluster_assume_role" {
 }
 
 resource "aws_iam_role" "eks_cluster" {
-  name               = "${local.cluster_name}-cluster-role"
+  name               = "${var.cluster_name}-cluster-role"
   assume_role_policy = data.aws_iam_policy_document.eks_cluster_assume_role.json
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
@@ -31,8 +32,9 @@ data "aws_iam_policy_document" "eks_node_group_assume_role" {
 }
 
 resource "aws_iam_role" "eks_node_group" {
-  name               = "${local.cluster_name}-node-group-role"
+  name               = "${var.cluster_name}-node-group-role"
   assume_role_policy = data.aws_iam_policy_document.eks_node_group_assume_role.json
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
@@ -51,13 +53,14 @@ resource "aws_iam_role_policy_attachment" "eks_container_registry_policy" {
 }
 
 data "tls_certificate" "eks" {
-  url = module.eks.oidc_issuer_url
+  url = var.oidc_issuer_url
 }
 
 resource "aws_iam_openid_connect_provider" "eks" {
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
-  url             = module.eks.oidc_issuer_url
+  url             = var.oidc_issuer_url
+  tags = var.tags
 }
 
 data "aws_iam_policy_document" "vpc_cni_assume_role" {
@@ -82,8 +85,9 @@ data "aws_iam_policy_document" "vpc_cni_assume_role" {
 }
 
 resource "aws_iam_role" "vpc_cni" {
-  name               = "${local.cluster_name}-vpc-cni-role"
+  name               = "${var.cluster_name}-vpc-cni-role"
   assume_role_policy = data.aws_iam_policy_document.vpc_cni_assume_role.json
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "vpc_cni" {
@@ -113,8 +117,9 @@ data "aws_iam_policy_document" "ebs_csi_assume_role" {
 }
 
 resource "aws_iam_role" "ebs_csi" {
-  name               = "${local.cluster_name}-ebs-csi-role"
+  name               = "${var.cluster_name}-ebs-csi-role"
   assume_role_policy = data.aws_iam_policy_document.ebs_csi_assume_role.json
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "ebs_csi" {
@@ -125,10 +130,11 @@ resource "aws_iam_role_policy_attachment" "ebs_csi" {
 resource "aws_kms_key" "eks" {
   deletion_window_in_days = 7
   enable_key_rotation     = true
+  tags = var.tags
 }
 
 resource "aws_kms_alias" "eks" {
-  name          = "alias/${local.cluster_name}"
+  name          = "alias/${var.cluster_name}"
   target_key_id = aws_kms_key.eks.key_id
 }
 
@@ -149,12 +155,13 @@ data "aws_iam_policy_document" "platform_api_assume_role" {
 }
 
 resource "aws_iam_role" "platform_api" {
-  name               = "${local.cluster_name}-platform-api-role"
+  name               = "${var.cluster_name}-platform-api-role"
   assume_role_policy = data.aws_iam_policy_document.platform_api_assume_role.json
+  tags = var.tags
 }
 
 resource "aws_iam_policy" "platform_api" {
-  name = "${local.cluster_name}-platform-api-policy"
+  name = "${var.cluster_name}-platform-api-policy"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -164,7 +171,7 @@ resource "aws_iam_policy" "platform_api" {
         Action = [
           "eks:DescribeCluster"
         ]
-        Resource = module.eks.cluster_arn
+        Resource = var.cluster_arn
       },
       {
         Effect = "Allow"
@@ -175,6 +182,7 @@ resource "aws_iam_policy" "platform_api" {
       }
     ]
   })
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "platform_api" {
@@ -199,8 +207,9 @@ data "aws_iam_policy_document" "backstage_assume_role" {
 }
 
 resource "aws_iam_role" "backstage" {
-  name               = "${local.cluster_name}-backstage-role"
+  name               = "${var.cluster_name}-backstage-role"
   assume_role_policy = data.aws_iam_policy_document.backstage_assume_role.json
+  tags = var.tags
 }
 
 data "aws_iam_policy_document" "aws_load_balancer_controller_assume_role" {
@@ -225,12 +234,13 @@ data "aws_iam_policy_document" "aws_load_balancer_controller_assume_role" {
 }
 
 resource "aws_iam_role" "aws_load_balancer_controller" {
-  name               = "${local.cluster_name}-load-balancer-controller-role"
+  name               = "${var.cluster_name}-load-balancer-controller-role"
   assume_role_policy = data.aws_iam_policy_document.aws_load_balancer_controller_assume_role.json
+  tags = var.tags
 }
 
 resource "aws_iam_policy" "aws_load_balancer_controller" {
-  name = "${local.cluster_name}-load-balancer-controller-policy"
+  name = "${var.cluster_name}-load-balancer-controller-policy"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -268,58 +278,12 @@ resource "aws_iam_policy" "aws_load_balancer_controller" {
       }
     ]
   })
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
   policy_arn = aws_iam_policy.aws_load_balancer_controller.arn
   role       = aws_iam_role.aws_load_balancer_controller.name
-}
-
-data "aws_iam_policy_document" "platform_api_secrets_policy" {
-  statement {
-    effect = "Allow"
-    actions = [
-      "secretsmanager:GetSecretValue",
-      "secretsmanager:DescribeSecret"
-    ]
-    resources = [
-      "arn:aws:secretsmanager:${var.aws_region}:${local.account_id}:secret:${var.project_name}-${var.environment}-jwt-secret-*",
-      "arn:aws:secretsmanager:${var.aws_region}:${local.account_id}:secret:${var.project_name}-${var.environment}-database-connection-*"
-    ]
-  }
-}
-
-data "aws_iam_policy_document" "backstage_secrets_policy" {
-  statement {
-    effect = "Allow"
-    actions = [
-      "secretsmanager:GetSecretValue",
-      "secretsmanager:DescribeSecret"
-    ]
-    resources = [
-      "arn:aws:secretsmanager:${var.aws_region}:${local.account_id}:secret:${var.project_name}-${var.environment}-database-connection-*"
-    ]
-  }
-}
-
-resource "aws_iam_policy" "platform_api_secrets" {
-  name   = "${var.project_name}-${var.environment}-platform-api-secrets-policy"
-  policy = data.aws_iam_policy_document.platform_api_secrets_policy.json
-}
-
-resource "aws_iam_policy" "backstage_secrets" {
-  name   = "${var.project_name}-${var.environment}-backstage-secrets-policy"
-  policy = data.aws_iam_policy_document.backstage_secrets_policy.json
-}
-
-resource "aws_iam_role_policy_attachment" "platform_api_secrets" {
-  role       = aws_iam_role.platform_api.name
-  policy_arn = aws_iam_policy.platform_api_secrets.arn
-}
-
-resource "aws_iam_role_policy_attachment" "backstage_secrets" {
-  role       = aws_iam_role.backstage.name
-  policy_arn = aws_iam_policy.backstage_secrets.arn
 }
 
 data "aws_iam_policy_document" "aws_load_balancer_controller_ec2" {
@@ -343,9 +307,59 @@ data "aws_iam_policy_document" "aws_load_balancer_controller_ec2" {
 resource "aws_iam_policy" "aws_load_balancer_controller_ec2" {
   name   = "${var.project_name}-${var.environment}-load-balancer-controller-ec2-policy"
   policy = data.aws_iam_policy_document.aws_load_balancer_controller_ec2.json
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller_ec2" {
   role       = aws_iam_role.aws_load_balancer_controller.name
   policy_arn = aws_iam_policy.aws_load_balancer_controller_ec2.arn
+}
+
+data "aws_iam_policy_document" "platform_api_secrets_policy" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret"
+    ]
+    resources = [
+      "arn:aws:secretsmanager:${var.aws_region}:${var.account_id}:secret:${var.project_name}-${var.environment}-jwt-secret-*",
+      "arn:aws:secretsmanager:${var.aws_region}:${var.account_id}:secret:${var.project_name}-${var.environment}-database-connection-*"
+    ]
+  }
+}
+
+data "aws_iam_policy_document" "backstage_secrets_policy" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret"
+    ]
+    resources = [
+      "arn:aws:secretsmanager:${var.aws_region}:${var.account_id}:secret:${var.project_name}-${var.environment}-database-connection-*"
+    ]
+  }
+}
+
+resource "aws_iam_policy" "platform_api_secrets" {
+  name   = "${var.project_name}-${var.environment}-platform-api-secrets-policy"
+  policy = data.aws_iam_policy_document.platform_api_secrets_policy.json
+  tags = var.tags
+}
+
+resource "aws_iam_policy" "backstage_secrets" {
+  name   = "${var.project_name}-${var.environment}-backstage-secrets-policy"
+  policy = data.aws_iam_policy_document.backstage_secrets_policy.json
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "platform_api_secrets" {
+  role       = aws_iam_role.platform_api.name
+  policy_arn = aws_iam_policy.platform_api_secrets.arn
+}
+
+resource "aws_iam_role_policy_attachment" "backstage_secrets" {
+  role       = aws_iam_role.backstage.name
+  policy_arn = aws_iam_policy.backstage_secrets.arn
 }
