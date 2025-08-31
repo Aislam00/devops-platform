@@ -48,4 +48,5 @@ private_key.json
 scripts/deploy-k8s-secrets.sh
 terraform/infrastructure/terraform.tfvars
 platform-api/.env
-*.sh
+final.sh
+review_script.sh
