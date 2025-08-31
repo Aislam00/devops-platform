@@ -43,12 +43,11 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
-    - name: Deploy Infrastructure
+    - name: Deploy Core Infrastructure
       working-directory: terraform/environments/dev
       run: |
         terraform init -backend-config=backend.conf
-        terraform plan -out=tfplan
-        terraform apply tfplan
+        terraform apply -target=module.vpc -target=module.eks -target=module.rds -target=aws_route53_record.api -target=aws_route53_record.portal -auto-approve
 
     - name: Get cluster name
       id: terraform

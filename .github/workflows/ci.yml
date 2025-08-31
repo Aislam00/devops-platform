@@ -113,7 +113,7 @@ jobs:
     - name: Login to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: Get account ID and terraform outputs
+    - name: Get ECR repository URLs
       id: account
       run: |
         echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
@@ -131,9 +131,18 @@ jobs:
         docker push ${{ steps.account.outputs.api_repo }}:latest
         docker push ${{ steps.account.outputs.api_repo }}:${{ github.sha }}
 
-    - name: Build & Push devplatform-portal
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'yarn'
+        cache-dependency-path: backstage/portal/yarn.lock
+
+    - name: Build & Push backstage portal
       run: |
         cd backstage/portal
+        yarn install --frozen-lockfile
+        yarn workspace backend build
         docker build --platform linux/amd64 -t devplatform-portal .
         docker tag devplatform-portal:latest ${{ steps.account.outputs.portal_repo }}:latest
         docker tag devplatform-portal:latest ${{ steps.account.outputs.portal_repo }}:${{ github.sha }}
