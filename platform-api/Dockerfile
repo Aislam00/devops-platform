@@ -7,8 +7,7 @@ RUN apk update && apk add --no-cache \
     ca-certificates \
     tzdata \
     && apk upgrade \
-    && rm -rf /var/cache/apk/* \
-    && adduser -D -s /bin/sh -u 65534 nonroot
+    && rm -rf /var/cache/apk/*
 
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
@@ -24,10 +23,9 @@ FROM scratch
 
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /etc/passwd /etc/passwd
 COPY --from=builder /app/platform-api /platform-api
 
-USER nonroot:nonroot
+USER 65534:65534
 
 EXPOSE 8080
 
