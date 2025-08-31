@@ -68,7 +68,7 @@ spec:
         operator: Equal
       containers:
       - name: platform-api
-        image: 475641479654.dkr.ecr.eu-west-2.amazonaws.com/devplatform-apiatest
+        image: 475641479654.dkr.ecr.eu-west-2.amazonaws.com/devplatform-api:latest
         ports:
         - containerPort: 8080
         env:
