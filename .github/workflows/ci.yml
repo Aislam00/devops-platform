@@ -133,7 +133,7 @@ jobs:
 
     - name: Build & Push devplatform-portal
       run: |
-        cd backstage
+        cd backstage/portal
         docker build --platform linux/amd64 -t devplatform-portal .
         docker tag devplatform-portal:latest ${{ steps.account.outputs.portal_repo }}:latest
         docker tag devplatform-portal:latest ${{ steps.account.outputs.portal_repo }}:${{ github.sha }}
