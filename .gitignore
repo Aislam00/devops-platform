@@ -50,3 +50,4 @@ terraform/infrastructure/terraform.tfvars
 platform-api/.env
 final.sh
 review_script.sh
+deploy.sh
