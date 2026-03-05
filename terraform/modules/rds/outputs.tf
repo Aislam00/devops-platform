@@ -34,8 +34,3 @@ output "security_group_id" {
 output "kms_key_arn" {
   value = aws_kms_key.rds.arn
 }
-
-output "db_password" {
-  value     = random_password.master.result
-  sensitive = true
-}

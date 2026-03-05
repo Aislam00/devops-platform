@@ -174,10 +174,12 @@ resource "aws_iam_policy" "platform_api" {
         Resource = var.cluster_arn
       },
       {
+        Sid    = "CostExplorerReadOnly"
         Effect = "Allow"
         Action = [
           "ce:GetCostAndUsage"
         ]
+
         Resource = "*"
       }
     ]
@@ -246,6 +248,7 @@ resource "aws_iam_policy" "aws_load_balancer_controller" {
     Version = "2012-10-17"
     Statement = [
       {
+        Sid    = "EC2ReadAndTag"
         Effect = "Allow"
         Action = [
           "ec2:DescribeAccountAttributes",
@@ -259,22 +262,80 @@ resource "aws_iam_policy" "aws_load_balancer_controller" {
           "ec2:DescribeNetworkInterfaces",
           "ec2:DescribeTags",
           "ec2:CreateTags",
-          "ec2:DeleteTags",
-          "elasticloadbalancing:*"
+          "ec2:DeleteTags"
         ]
+
         Resource = "*"
       },
       {
+        Sid    = "ELBManagement"
+        Effect = "Allow"
+        Action = [
+          "elasticloadbalancing:CreateLoadBalancer",
+          "elasticloadbalancing:DeleteLoadBalancer",
+          "elasticloadbalancing:DescribeLoadBalancers",
+          "elasticloadbalancing:DescribeLoadBalancerAttributes",
+          "elasticloadbalancing:ModifyLoadBalancerAttributes",
+          "elasticloadbalancing:CreateTargetGroup",
+          "elasticloadbalancing:DeleteTargetGroup",
+          "elasticloadbalancing:DescribeTargetGroups",
+          "elasticloadbalancing:DescribeTargetGroupAttributes",
+          "elasticloadbalancing:ModifyTargetGroup",
+          "elasticloadbalancing:ModifyTargetGroupAttributes",
+          "elasticloadbalancing:RegisterTargets",
+          "elasticloadbalancing:DeregisterTargets",
+          "elasticloadbalancing:DescribeTargetHealth",
+          "elasticloadbalancing:CreateListener",
+          "elasticloadbalancing:DeleteListener",
+          "elasticloadbalancing:DescribeListeners",
+          "elasticloadbalancing:ModifyListener",
+          "elasticloadbalancing:CreateRule",
+          "elasticloadbalancing:DeleteRule",
+          "elasticloadbalancing:DescribeRules",
+          "elasticloadbalancing:ModifyRule",
+          "elasticloadbalancing:SetRulePriorities",
+          "elasticloadbalancing:AddTags",
+          "elasticloadbalancing:RemoveTags",
+          "elasticloadbalancing:DescribeTags",
+          "elasticloadbalancing:SetSecurityGroups",
+          "elasticloadbalancing:SetSubnets",
+          "elasticloadbalancing:SetIpAddressType",
+          "elasticloadbalancing:AddListenerCertificates",
+          "elasticloadbalancing:RemoveListenerCertificates",
+          "elasticloadbalancing:DescribeListenerCertificates",
+          "elasticloadbalancing:DescribeSSLPolicies"
+        ]
+
+        Resource = "*"
+      },
+      {
+        Sid    = "ACMReadOnly"
         Effect = "Allow"
         Action = [
           "acm:ListCertificates",
-          "acm:DescribeCertificate",
+          "acm:DescribeCertificate"
+        ]
+
+        Resource = "*"
+      },
+      {
+        Sid    = "Route53ReadOnly"
+        Effect = "Allow"
+        Action = [
           "route53:ListHostedZones",
-          "route53:ListResourceRecordSets",
-          "route53:ChangeResourceRecordSets",
           "route53:GetChange"
         ]
+
         Resource = "*"
+      },
+      {
+        Sid    = "Route53RecordManagement"
+        Effect = "Allow"
+        Action = [
+          "route53:ChangeResourceRecordSets",
+          "route53:ListResourceRecordSets"
+        ]
+        Resource = "arn:aws:route53:::hostedzone/${var.hosted_zone_id}"
       }
     ]
   })
@@ -288,19 +349,23 @@ resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
 
 data "aws_iam_policy_document" "aws_load_balancer_controller_ec2" {
   statement {
+    sid    = "ManageSecurityGroupsInVPC"
     effect = "Allow"
     actions = [
       "ec2:CreateSecurityGroup",
       "ec2:DeleteSecurityGroup",
-      "ec2:DescribeSecurityGroups",
       "ec2:AuthorizeSecurityGroupIngress",
       "ec2:RevokeSecurityGroupIngress",
       "ec2:AuthorizeSecurityGroupEgress",
-      "ec2:RevokeSecurityGroupEgress",
-      "ec2:CreateTags",
-      "ec2:DeleteTags"
+      "ec2:RevokeSecurityGroupEgress"
     ]
     resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:Vpc"
+      values   = ["arn:aws:ec2:${var.aws_region}:${var.account_id}:vpc/${var.vpc_id}"]
+    }
   }
 }
 

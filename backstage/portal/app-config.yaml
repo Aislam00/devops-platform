@@ -26,7 +26,9 @@ backend:
       database: ${POSTGRES_DB}
       ssl:
         require: true
-        rejectUnauthorized: false
+        rejectUnauthorized: true
+        ca:
+          $file: /etc/ssl/certs/rds-combined-ca-bundle.pem
 
 proxy:
   endpoints:
@@ -47,15 +49,12 @@ catalog:
   rules:
     - allow: [Component, System, API, Resource, Location, User, Group, Template]
   locations:
-    # Platform components - fixed path
     - type: file
       target: ./examples/platform-components.yaml
-    # Software templates - fixed path
     - type: file
       target: ./examples/templates.yaml
       rules:
         - allow: [Template]
-    # Organization - fixed path
     - type: file
       target: ./examples/org.yaml
       rules:
@@ -69,9 +68,12 @@ techdocs:
     type: 'local'
 
 auth:
+  environment: production
   providers:
-    guest:
-      dangerouslyAllowOutsideDevelopment: true
+    github:
+      production:
+        clientId: ${AUTH_GITHUB_CLIENT_ID}
+        clientSecret: ${AUTH_GITHUB_CLIENT_SECRET}
 
 scaffolder:
   defaultAuthor:
@@ -85,6 +87,6 @@ kubernetes:
   clusterLocatorMethods:
     - type: 'config'
       clusters:
-        - url: https://5AF1C146F9DBE81926EC3854AE58F151.gr7.eu-west-2.eks.amazonaws.com
+        - url: ${EKS_CLUSTER_ENDPOINT}
           name: devplatform-dev
           authProvider: 'aws'

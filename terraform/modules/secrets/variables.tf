@@ -22,9 +22,8 @@ variable "db_master_username" {
   type = string
 }
 
-variable "db_password" {
+variable "rds_password_secret_arn" {
   type = string
-  sensitive = true
 }
 
 variable "tags" {

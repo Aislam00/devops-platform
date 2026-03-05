@@ -75,6 +75,8 @@ module "iam" {
   oidc_provider_arn  = aws_iam_openid_connect_provider.eks.arn
   oidc_issuer_url    = module.eks.oidc_issuer_url
   cluster_arn        = module.eks.cluster_arn
+  vpc_id             = module.vpc.vpc_id
+  hosted_zone_id     = data.aws_route53_zone.main.zone_id
   tags               = local.common_tags
 
   depends_on = [module.eks]
@@ -131,6 +133,17 @@ module "rds" {
   depends_on = [module.vpc]
 }
 
+module "github_oidc" {
+  source = "../../modules/github-oidc"
+
+  project_name = var.project_name
+  environment  = var.environment
+  aws_region   = var.aws_region
+  account_id   = local.account_id
+  github_repo  = var.github_repo
+  tags         = local.common_tags
+}
+
 module "ecr" {
   source = "../../modules/ecr"
 
@@ -147,7 +160,7 @@ module "secrets" {
   db_instance_port     = module.rds.db_instance_port
   db_name              = module.rds.db_name
   db_master_username   = module.rds.master_username
-  db_password          = module.rds.db_password
+  rds_password_secret_arn = module.rds.password_secret_arn
   tags                 = local.common_tags
 
   depends_on = [module.rds]

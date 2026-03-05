@@ -40,7 +40,7 @@ variable "allowed_cidr_blocks" {
 
 variable "kubernetes_version" {
   type    = string
-  default = "1.28"
+  default = "1.28.15"
 }
 
 variable "database_name" {
@@ -71,6 +71,11 @@ variable "db_allocated_storage" {
 variable "db_max_allocated_storage" {
   type    = number
   default = 100
+}
+
+variable "github_repo" {
+  description = "GitHub repository in owner/repo format for OIDC trust policy"
+  type        = string
 }
 
 variable "portal_dns_record" {

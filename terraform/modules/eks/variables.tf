@@ -20,7 +20,7 @@ variable "private_subnet_ids" {
 
 variable "kubernetes_version" {
   type    = string
-  default = "1.28"
+  default = "1.28.15"
 }
 
 variable "kms_key_arn" {
@@ -68,4 +68,10 @@ variable "ebs_csi_role_arn" {
 variable "ssh_key_name" {
   type    = string
   default = null
+}
+
+variable "public_access_cidrs" {
+  description = "List of trusted CIDR blocks allowed to access the EKS API server public endpoint (e.g. office/VPN IPs)"
+  type        = list(string)
+  default     = ["203.0.113.0/24"]
 }

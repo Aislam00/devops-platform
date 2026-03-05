@@ -10,7 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func AuthRequired(jwtSecret string) gin.HandlerFunc {
+func AuthRequired(jwtSecret string, tokenIssuedAfter int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -49,6 +49,15 @@ func AuthRequired(jwtSecret string) gin.HandlerFunc {
 			if exp, ok := claims["exp"].(float64); ok {
 				if time.Now().Unix() > int64(exp) {
 					c.JSON(http.StatusUnauthorized, gin.H{"error": "Token expired"})
+					c.Abort()
+					return
+				}
+			}
+
+			if tokenIssuedAfter > 0 {
+				iat, ok := claims["iat"].(float64)
+				if !ok || int64(iat) < tokenIssuedAfter {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "Token issued before credential rotation, please re-authenticate"})
 					c.Abort()
 					return
 				}

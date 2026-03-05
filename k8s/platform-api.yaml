@@ -43,7 +43,7 @@ metadata:
   name: platform-api-sa
   namespace: platform-api
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::475641479654:role/devplatform-dev-platform-api-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::__AWS_ACCOUNT_ID__:role/devplatform-dev-platform-api-role
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -68,7 +68,15 @@ spec:
         operator: Equal
       containers:
       - name: platform-api
-        image: 475641479654.dkr.ecr.eu-west-2.amazonaws.com/devplatform-api:latest
+        image: __AWS_ACCOUNT_ID__.dkr.ecr.eu-west-2.amazonaws.com/devplatform-api:__IMAGE_TAG__
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - "ALL"
         ports:
         - containerPort: 8080
         env:
@@ -84,6 +92,11 @@ spec:
               key: JWT_SECRET
         - name: AWS_REGION
           value: "eu-west-2"
+        - name: TOKEN_ISSUED_AFTER
+          valueFrom:
+            secretKeyRef:
+              name: platform-api-secrets
+              key: TOKEN_ISSUED_AFTER
         - name: ENVIRONMENT
           value: "production"
         - name: CLUSTER_NAME
@@ -129,7 +142,7 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:475641479654:certificate/2ffd316a-fda0-43c8-94e2-5c20c8245a91
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:__AWS_ACCOUNT_ID__:certificate/2ffd316a-fda0-43c8-94e2-5c20c8245a91
 spec:
   ingressClassName: alb
   rules:
@@ -143,3 +156,14 @@ spec:
             name: platform-api-service
             port:
               number: 80
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: platform-api-pdb
+  namespace: platform-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: platform-api

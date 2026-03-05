@@ -38,6 +38,10 @@ output "ssl_certificate_arn" {
   value = module.route53.certificate_arn
 }
 
+output "github_actions_role_arn" {
+  value = module.github_oidc.role_arn
+}
+
 output "platform_urls" {
   value = {
     portal = "https://portal.${var.domain_name}"

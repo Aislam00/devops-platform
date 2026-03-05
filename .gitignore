@@ -51,3 +51,5 @@ platform-api/.env
 final.sh
 review_script.sh
 deploy.sh
+complete_project_review.txt
+all_go_files.txt

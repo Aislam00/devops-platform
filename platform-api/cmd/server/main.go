@@ -90,7 +90,7 @@ func main() {
 	}
 
 	protected := api.Group("/")
-	protected.Use(middleware.AuthRequired(cfg.JWTSecret))
+	protected.Use(middleware.AuthRequired(cfg.JWTSecret, cfg.TokenIssuedAfter))
 	{
 		protected.GET("/tenants", handlers.ListTenants(tenantService))
 		protected.POST("/tenants", handlers.CreateTenant(tenantService))

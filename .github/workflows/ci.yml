@@ -7,6 +7,7 @@ on:
     branches: [main]
 
 permissions:
+  id-token: write
   contents: read
   security-events: write
   actions: read
@@ -101,8 +102,7 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Setup Terraform
@@ -125,10 +125,7 @@ jobs:
     - name: Build & Push platform-api
       run: |
         cd platform-api
-        docker build --platform linux/amd64 -t platform-api .
-        docker tag platform-api:latest ${{ steps.account.outputs.api_repo }}:latest
-        docker tag platform-api:latest ${{ steps.account.outputs.api_repo }}:${{ github.sha }}
-        docker push ${{ steps.account.outputs.api_repo }}:latest
+        docker build --platform linux/amd64 -t ${{ steps.account.outputs.api_repo }}:${{ github.sha }} .
         docker push ${{ steps.account.outputs.api_repo }}:${{ github.sha }}
 
     - name: Setup Node.js
@@ -143,8 +140,5 @@ jobs:
         cd backstage/portal
         yarn install --frozen-lockfile
         yarn workspace backend build
-        docker build --platform linux/amd64 -t devplatform-portal .
-        docker tag devplatform-portal:latest ${{ steps.account.outputs.portal_repo }}:latest
-        docker tag devplatform-portal:latest ${{ steps.account.outputs.portal_repo }}:${{ github.sha }}
-        docker push ${{ steps.account.outputs.portal_repo }}:latest
+        docker build --platform linux/amd64 -t ${{ steps.account.outputs.portal_repo }}:${{ github.sha }} .
         docker push ${{ steps.account.outputs.portal_repo }}:${{ github.sha }}

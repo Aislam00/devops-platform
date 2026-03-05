@@ -41,7 +41,7 @@ metadata:
   name: backstage-sa
   namespace: backstage
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::475641479654:role/devplatform-dev-backstage-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::__AWS_ACCOUNT_ID__:role/devplatform-dev-backstage-role
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -66,7 +66,20 @@ spec:
         operator: Equal
       containers:
       - name: backstage
-        image: 475641479654.dkr.ecr.eu-west-2.amazonaws.com/devplatform-portal:latest
+        image: __AWS_ACCOUNT_ID__.dkr.ecr.eu-west-2.amazonaws.com/devplatform-portal:__IMAGE_TAG__
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - "ALL"
+        volumeMounts:
+        - name: rds-ca-cert
+          mountPath: /etc/ssl/certs/rds-combined-ca-bundle.pem
+          subPath: rds-combined-ca-bundle.pem
+          readOnly: true
         ports:
         - containerPort: 7007
         env:
@@ -95,6 +108,16 @@ spec:
             secretKeyRef:
               name: backstage-secrets
               key: POSTGRES_PASSWORD
+        - name: AUTH_GITHUB_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: backstage-secrets
+              key: AUTH_GITHUB_CLIENT_ID
+        - name: AUTH_GITHUB_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: backstage-secrets
+              key: AUTH_GITHUB_CLIENT_SECRET
         - name: NODE_ENV
           value: "production"
         resources:
@@ -116,6 +139,23 @@ spec:
             port: 7007
           initialDelaySeconds: 30
           periodSeconds: 10
+      initContainers:
+      - name: download-rds-ca
+        image: public.ecr.aws/amazonlinux/amazonlinux:2023.6.20250218.2
+        command: ['sh', '-c', 'curl -sS -o /certs/rds-combined-ca-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem']
+        securityContext:
+          runAsNonRoot: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - "ALL"
+        volumeMounts:
+        - name: rds-ca-cert
+          mountPath: /certs
+      volumes:
+      - name: rds-ca-cert
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -137,7 +177,7 @@ metadata:
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:475641479654:certificate/2ffd316a-fda0-43c8-94e2-5c20c8245a91
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:__AWS_ACCOUNT_ID__:certificate/2ffd316a-fda0-43c8-94e2-5c20c8245a91
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
 spec:
   ingressClassName: alb
@@ -152,3 +192,14 @@ spec:
             name: backstage-service
             port:
               number: 80
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backstage-pdb
+  namespace: backstage
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: backstage
